@@ -43,10 +43,18 @@ export default function App() {
   const [auditProgressStatus, setAuditProgressStatus] = useState('');
 
   // Handle CSV / Excel file import
-  const handleImportData = (newCalls) => {
+  const handleImportData = async (newCalls) => {
     setCalls((prev) => [...newCalls, ...prev]);
     setIsUploadOpen(false);
     confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+
+    // Automatically trigger AI compliance audits in the background for newly imported calls
+    setIsAuditingBatch(true);
+    for (const newCall of newCalls) {
+      await auditCallRecord(newCall);
+    }
+    setIsAuditingBatch(false);
+    confetti({ particleCount: 80, spread: 70, origin: { y: 0.5 } });
   };
 
   // Delete call records in batch
