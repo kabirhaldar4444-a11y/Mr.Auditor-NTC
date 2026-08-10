@@ -974,36 +974,6 @@ Please return the complete compliance audit results matching the response schema
           {activeView === 'settings' && (
             <div className="space-y-6 max-w-4xl">
               
-              {/* Google Gemini API Key Credentials */}
-              <div className="card-white p-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold shrink-0">
-                    <Key className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-extrabold text-[var(--text-primary)] text-sm">Google Gemini API Credentials</h3>
-                    <p className="text-[11px] text-[var(--text-secondary)] font-medium">Configure your active Google Gemini API Key for speech-to-text, speaker diarization, and compliance checks</p>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 max-w-md">
-                  <label className="block text-xs font-bold text-[var(--text-secondary)]">Google Gemini API Key (AQ. or AIzaSy...)</label>
-                  <input 
-                    type="password" 
-                    placeholder="AQ.xxxxxxxxxxxxxx" 
-                    value={apiKey} 
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setApiKey(val);
-                      localStorage.setItem('gemini_api_key', val);
-                    }}
-                    className="input-field font-mono text-xs"
-                  />
-                  <p className="text-[10px] text-[var(--text-muted)] font-medium leading-normal">
-                    Used to access Gemini 1.5 Flash for unified compliance and transcript evaluations. Stored securely in your browser's local memory.
-                  </p>
-                </div>
-              </div>
 
 
               {/* SlashRTC proxy logins */}
