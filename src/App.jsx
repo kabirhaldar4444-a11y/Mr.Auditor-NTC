@@ -101,7 +101,7 @@ const blobToBase64 = (blob) => {
 };
 
 // Google Gemini API REST client helper
-const callGeminiApi = async (apiKey, payload, retriesLeft = 3) => {
+const callGeminiApi = async (apiKey, payload, retriesLeft = 5) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
   
   try {
@@ -180,7 +180,7 @@ export default function App() {
 
   // Settings & Session State
   const [slashRtcActive, setSlashRtcActive] = useState(true);
-  const [apiKey, setApiKey] = useState(() => import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('gemini_api_key') || import.meta.env.VITE_OPENAI_API_KEY || localStorage.getItem('openai_api_key') || '');
+  const [apiKey, setApiKey] = useState(() => 'AQ.Ab8RN6KIU-W1ienOfMmHx1AV9rRF7t_D7Lie-1YXtSxkMhlckQ');
   
   // SlashRTC credential form bindings inside Settings view
   const [username, setUsername] = useState('SupportEngineer');
@@ -722,6 +722,11 @@ Please return the complete compliance audit results matching the response schema
       while (currentIndex < queue.length && !cancelBatchRef.current) {
         const index = currentIndex++;
         const callRecord = queue[index];
+        
+        // Add a 4-second stagger delay between starting calls to stay safely under Gemini 20 RPM Free Tier limit
+        if (index > 0) {
+          await new Promise(resolve => setTimeout(resolve, 4000));
+        }
         
         try {
           const result = await auditCallRecord(callRecord, true);

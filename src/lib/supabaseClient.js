@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Retrieve credentials from Vite env or localStorage fallback
-let supabaseUrl = import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('supabase_url') || '';
-let supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('supabase_anon_key') || '';
+let supabaseUrl = 'https://wzsughidtvyaxqvyqaqk.supabase.co';
+let supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6c3VnaGlkdHZ5YXhxdnlxYXFrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzNDcwODYsImV4cCI6MjEwMTkyMzA4Nn0.boAp7qDwi3Oo7_ehcLMwGFnWUjIImtNcQFuhC8Sx6fk';
 
 let supabase = null;
 
@@ -19,8 +19,8 @@ if (supabaseUrl && supabaseAnonKey) {
  * Dynamically re-initializes if config is updated in browser settings.
  */
 export const getSupabaseClient = () => {
-  const currentUrl = import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('supabase_url') || '';
-  const currentKey = import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('supabase_anon_key') || '';
+  const currentUrl = 'https://wzsughidtvyaxqvyqaqk.supabase.co';
+  const currentKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6c3VnaGlkdHZ5YXhxdnlxYXFrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzNDcwODYsImV4cCI6MjEwMTkyMzA4Nn0.boAp7qDwi3Oo7_ehcLMwGFnWUjIImtNcQFuhC8Sx6fk';
 
   if (!currentUrl || !currentKey) {
     return null;
@@ -45,8 +45,8 @@ export const getSupabaseClient = () => {
  * Checks if Supabase has been configured via .env or localStorage.
  */
 export const isSupabaseConfigured = () => {
-  const currentUrl = import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('supabase_url') || '';
-  const currentKey = import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('supabase_anon_key') || '';
+  const currentUrl = 'https://wzsughidtvyaxqvyqaqk.supabase.co';
+  const currentKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6c3VnaGlkdHZ5YXhxdnlxYXFrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzNDcwODYsImV4cCI6MjEwMTkyMzA4Nn0.boAp7qDwi3Oo7_ehcLMwGFnWUjIImtNcQFuhC8Sx6fk';
   return !!(currentUrl && currentKey);
 };
 
