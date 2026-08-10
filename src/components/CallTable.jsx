@@ -15,13 +15,96 @@ const DEFAULT_COLUMNS = [
   'jobTitle'
 ];
 
-export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAuditingId, onDeleteCalls, initialAgentFilter = 'ALL', onOpenUpload }) {
+const COLUMN_MAPPING = {
+  'DATE-TIME': 'callDate',
+  'DATE_TIME': 'callDate',
+  'LEAD ID': 'callerId',
+  'LEAD_ID': 'callerId',
+  'CALLER ID': 'callerId',
+  'CALLER_ID': 'callerId',
+  'AGENT FULL NAME': 'agentName',
+  'AGENT_FULL_NAME': 'agentName',
+  'AGENT NAME': 'agentName',
+  'AGENT_NAME': 'agentName',
+  'CAMPAIGN': 'campaign',
+  'PROCESS': 'queue',
+  'QUEUE': 'queue',
+  'CALL TIME': 'duration',
+  'CALL_TIME': 'duration',
+  'DURATION': 'duration',
+  'TALKTIME': 'talkTime',
+  'TALK_TIME': 'talkTime',
+  'HOLD TIME': 'holdTime',
+  'HOLD_TIME': 'holdTime',
+  'RECORDING PATH': 'audioUrl',
+  'RECORDING_PATH': 'audioUrl',
+  'AUDIO URL': 'audioUrl',
+  'AUDIO_URL': 'audioUrl',
+  'name': 'candidateName',
+  'candidateName': 'candidateName',
+  'candidate_name': 'candidateName',
+  'email': 'candidateEmail',
+  'candidateEmail': 'candidateEmail',
+  'candidate_email': 'candidateEmail',
+  'jobTitle': 'callType',
+  'JOB_TITLE': 'callType'
+};
+
+const getCellValue = (call, colName) => {
+  if (call.rawFields && call.rawFields[colName] !== undefined) {
+    return call.rawFields[colName];
+  }
+  const camelKey = COLUMN_MAPPING[colName] || colName;
+  return call[camelKey];
+};
+
+const getNormalizedDateString = (dateStr) => {
+  if (!dateStr) return '';
+  const cleanStr = String(dateStr).split(' ')[0]; // ignore time
+  
+  if (/^\d{4}-\d{2}-\d{2}$/.test(cleanStr)) {
+    return cleanStr;
+  }
+
+  const parts = cleanStr.split(/[\/\-]/);
+  if (parts.length === 3) {
+    let [p1, p2, p3] = parts;
+    if (p3.length === 2) {
+      p3 = '20' + p3;
+    }
+    let month = parseInt(p1);
+    let day = parseInt(p2);
+    let year = parseInt(p3);
+    
+    if (month > 12) {
+      const temp = month;
+      month = day;
+      day = temp;
+    }
+    
+    const mm = String(month).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    return `${year}-${mm}-${dd}`;
+  }
+
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch (_) {}
+  
+  return '';
+};
+
+export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAuditingId, onDeleteCalls, initialAgentFilter = 'ALL', onOpenUpload, onRunBatchAudit }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [agentFilter, setAgentFilter] = useState(initialAgentFilter);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const pageSize = 10;
+  const [dateFilter, setDateFilter] = useState('');
 
   // Dynamic Column Selector States
   const [visibleColumns, setVisibleColumns] = useState(() => new Set(DEFAULT_COLUMNS));
@@ -88,7 +171,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
     if (!openFilterColumn) return [];
     const values = {};
     calls.forEach(call => {
-      const cellVal = call.rawFields ? call.rawFields[openFilterColumn] : call[openFilterColumn];
+      const cellVal = getCellValue(call, openFilterColumn);
       const stringVal = cellVal === undefined || cellVal === null ? '' : String(cellVal).trim();
       const displayVal = stringVal || '(Blank)';
       values[displayVal] = (values[displayVal] || 0) + 1;
@@ -127,7 +210,13 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
       const matchCampaign = campaignFilter === 'ALL' || call.campaign === campaignFilter;
 
-      if (!matchSearch || !matchStatus || !matchAgent || !matchCampaign) {
+      let matchDate = true;
+      if (dateFilter) {
+        const callDateNorm = getNormalizedDateString(call.callDate);
+        matchDate = callDateNorm === dateFilter;
+      }
+
+      if (!matchSearch || !matchStatus || !matchAgent || !matchCampaign || !matchDate) {
         return false;
       }
 
@@ -135,7 +224,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
       for (const colName of Object.keys(activeColumnFilters)) {
         const selectedSet = activeColumnFilters[colName];
         if (selectedSet && selectedSet.size > 0) {
-          const cellVal = call.rawFields ? call.rawFields[colName] : call[colName];
+          const cellVal = getCellValue(call, colName);
           const stringVal = cellVal === undefined || cellVal === null ? '' : String(cellVal).trim();
           const displayVal = stringVal || '(Blank)';
           if (!selectedSet.has(displayVal)) {
@@ -146,7 +235,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
       return true;
     });
-  }, [calls, searchTerm, statusFilter, agentFilter, campaignFilter, activeColumnFilters]);
+  }, [calls, searchTerm, statusFilter, agentFilter, campaignFilter, activeColumnFilters, dateFilter]);
 
   const totalPages = Math.ceil(filteredCalls.length / pageSize) || 1;
   const paginatedCalls = useMemo(() => {
@@ -182,10 +271,15 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
     const ids = Array.from(selectedIds);
     setSelectedIds(new Set());
     
-    // Concurrently audit selected
-    await Promise.all(
-      calls.filter(c => ids.includes(c.id)).map(c => onAuditSingleCall(c))
-    );
+    const selectedCalls = calls.filter(c => ids.includes(c.id));
+    if (onRunBatchAudit) {
+      await onRunBatchAudit(selectedCalls);
+    } else {
+      // Fallback
+      await Promise.all(
+        selectedCalls.map(c => onAuditSingleCall(c))
+      );
+    }
   };
 
   const handleBatchDelete = () => {
@@ -252,6 +346,26 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
               <option key={camp} value={camp}>{camp}</option>
             ))}
           </select>
+
+          {/* Date Filter */}
+          <div className="flex items-center gap-1.5 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-lg px-2.5 py-1">
+            <span className="text-[10px] font-extrabold uppercase text-[var(--text-muted)] tracking-wider">Date:</span>
+            <input 
+              type="date"
+              value={dateFilter}
+              onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
+              className="bg-transparent border-none text-xs font-semibold text-[var(--text-primary)] outline-none cursor-pointer p-0.5"
+            />
+            {dateFilter && (
+              <button 
+                onClick={() => { setDateFilter(''); setCurrentPage(1); setSelectedIds(new Set()); }}
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 cursor-pointer ml-1"
+                title="Clear Date Filter"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
 
           {/* Columns Manager Button & Popover */}
           <div className="relative">
@@ -469,7 +583,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
                   {/* Visible dynamic columns */}
                   {Array.from(visibleColumns).map((colName) => {
-                    const value = call.rawFields ? call.rawFields[colName] : call[colName];
+                    const value = getCellValue(call, colName);
                     
                     if (colName === 'RECORDING PATH' || colName === 'RECORDING_PATH' || colName === 'audioUrl') {
                       return (
@@ -525,6 +639,8 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                       }`}>
                         {call.overallScore}%
                       </span>
+                    ) : call.status === 'Failed' ? (
+                      <span className="text-rose-500 text-xs font-extrabold">Failed</span>
                     ) : (
                       <span className="text-[var(--text-muted)] text-[11px] italic">Not Audited</span>
                     )}
@@ -545,6 +661,11 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                     {call.complianceStatus === 'Pending' && (
                       <span className="badge badge-info">
                         Pending
+                      </span>
+                    )}
+                    {call.complianceStatus === 'Error' && (
+                      <span className="badge badge-danger">
+                        <ShieldAlert className="w-3 h-3" /> API Error
                       </span>
                     )}
                   </td>

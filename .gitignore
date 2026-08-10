@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local Environment Secrets
+.env
+.env*.local
+
+# Scratch and check scripts
+scratch_*.js
+

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { UploadCloud, Check, AlertCircle, Sparkles, X, Database } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { generateRealisticHinglishTranscript } from '../data/scriptData';
+// generateRealisticHinglishTranscript import removed to keep audits 100% real
 
 export default function BatchUploader({ onImportData, onClose, sampleInitialRow }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -234,7 +234,8 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
       };
 
       // Preload a professional realistic transcript mapped to candidate details
-      const transcript = generateRealisticHinglishTranscript(candidateName, agentName, details);
+      // Initially, the transcript is empty (not audited yet) to keep it 100% real and prevent fake transcripts
+      const transcript = [];
 
       // Store all raw columns dynamically as strings to prevent React child rendering errors
       const rawFields = {};

@@ -122,6 +122,10 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
   
   const lastSpokenIndexRef = useRef(-1);
 
+  const [activeLineIdx, setActiveLineIdx] = useState(-1);
+  const transcriptContainerRef = useRef(null);
+  const transcriptTabContainerRef = useRef(null);
+
   // Handle play / pause toggle
   useEffect(() => {
     if (!audioRef.current) return;
@@ -158,6 +162,58 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
       audioRef.current.load();
     }
   }, [call]);
+
+  // Track the active dialogue line index based on playback time
+  useEffect(() => {
+    if (!call.transcript || call.transcript.length === 0) {
+      setActiveLineIdx(-1);
+      return;
+    }
+    
+    let index = -1;
+    for (let i = 0; i < call.transcript.length; i++) {
+      const lineSec = parseTimeToSeconds(call.transcript[i].time);
+      const nextLine = call.transcript[i + 1];
+      const nextLineSec = nextLine ? parseTimeToSeconds(nextLine.time) : (duration || lineSec + 5);
+      
+      if (currentTime >= lineSec && currentTime < nextLineSec) {
+        index = i;
+        break;
+      }
+    }
+    
+    // If no exact match is found but currentTime is greater than the last line, make the last line active
+    if (index === -1 && currentTime >= parseTimeToSeconds(call.transcript[call.transcript.length - 1].time)) {
+      index = call.transcript.length - 1;
+    }
+    
+    if (index !== activeLineIdx) {
+      setActiveLineIdx(index);
+    }
+  }, [currentTime, call.transcript, duration, activeLineIdx]);
+
+  // Automatically scroll the active transcript line into view
+  useEffect(() => {
+    if (activeLineIdx === -1 || !isPlaying) return;
+    
+    if (activeTab === 'AUDIT') {
+      const activeEl = document.querySelector('.stt-active-highlight');
+      if (activeEl && transcriptContainerRef.current) {
+        activeEl.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        });
+      }
+    } else if (activeTab === 'TRANSCRIPT') {
+      const activeEl = document.querySelector('.stt-active-highlight-tab2');
+      if (activeEl && transcriptTabContainerRef.current) {
+        activeEl.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        });
+      }
+    }
+  }, [activeLineIdx, isPlaying, activeTab]);
 
   // Robotic speech synthesis is disabled. Only the actual audio recording plays.
 
@@ -234,11 +290,27 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
     let wordIdx = 0;
     return words.map((w, index) => {
       if (w.trim() === '') {
+        const nextWordIdx = wordIdx;
+        const shouldHideSpace = !showFinalReport && isLineActive && nextWordIdx > currentWordIdx;
+        const shouldHideSpaceFuture = !showFinalReport && !isSpoken;
+        if (shouldHideSpace || shouldHideSpaceFuture) {
+          return null;
+        }
         return <span key={index}>{w}</span>;
       }
       
       const thisIdx = wordIdx;
       wordIdx++;
+
+      // In Live STT mode (when showFinalReport is false), hide words that haven't been reached yet
+      if (!showFinalReport) {
+        if (!isSpoken) {
+          return null;
+        }
+        if (isLineActive && thisIdx > currentWordIdx) {
+          return null;
+        }
+      }
 
       // Check classes
       let highlightClass = "transition-all duration-150 rounded px-0.5 select-none ";
@@ -329,7 +401,7 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
               className="btn-primary py-1.5 px-3.5 text-xs font-bold shadow-sm"
             >
               <Sparkles className={`w-3.5 h-3.5 ${isAuditing ? 'animate-spin' : 'text-amber-300 fill-amber-300'}`} />
-              <span>{isAuditing ? (auditProgressStatus || 'Re-Auditing...') : 'Run ChatGPT Audit'}</span>
+              <span>{isAuditing ? (auditProgressStatus || 'Re-Auditing...') : 'Run AI Audit'}</span>
             </button>
 
             <button
@@ -438,7 +510,7 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
               }`}
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>ChatGPT Audit Evaluation</span>
+              <span>AI Audit Evaluation</span>
             </button>
 
             <button
@@ -550,11 +622,16 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                   </div>
 
                   {/* Transcript Bubbles Stream */}
-                  <div className="flex-1 overflow-y-auto space-y-4 pr-2 max-h-[55vh]">
+                  <div ref={transcriptContainerRef} className="flex-1 overflow-y-auto space-y-4 pr-2 max-h-[55vh]">
                     {call.transcript && call.transcript.length > 0 ? (
                       call.transcript.map((line, idx) => {
                         const lineSec = parseTimeToSeconds(line.time);
                         const isSpoken = currentTime >= lineSec;
+
+                        // In Live STT mode, hide future bubbles that have not been spoken yet
+                        if (!showFinalReport && !isSpoken) {
+                          return null;
+                        }
                         
                         const nextLine = call.transcript[idx + 1];
                         const nextLineSec = nextLine ? parseTimeToSeconds(nextLine.time) : (duration || lineSec + 5);
@@ -797,30 +874,49 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
               </div>
 
               {call.transcript && call.transcript.length > 0 ? (
-                <div className="space-y-4">
-                  {call.transcript.map((line, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`p-4.5 rounded-xl border transition-all duration-200 ${
-                        line.speaker === 'Agent'
-                          ? 'bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] ml-0 mr-12 shadow-sm'
-                          : 'bg-indigo-50/40 border-indigo-100 text-[var(--text-primary)] ml-12 mr-0'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-[11px] mb-2 font-bold tracking-wide">
-                        <span className={`flex items-center gap-2 ${line.speaker === 'Agent' ? 'text-indigo-600' : 'text-emerald-600'}`}>
-                          <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                          {line.speaker === 'Agent' ? `Agent (${call.agentName})` : `Candidate (${call.candidateName})`}
-                        </span>
-                        <span className="font-mono text-[var(--text-muted)] text-[10px]">{line.time}</span>
+                <div ref={transcriptTabContainerRef} className="space-y-4">
+                  {call.transcript.map((line, idx) => {
+                    const lineSec = parseTimeToSeconds(line.time);
+                    const nextLine = call.transcript[idx + 1];
+                    const nextLineSec = nextLine ? parseTimeToSeconds(nextLine.time) : (duration || lineSec + 5);
+                    const isActive = currentTime >= lineSec && currentTime < nextLineSec && isPlaying;
+
+                    return (
+                      <div 
+                        key={idx} 
+                        onClick={() => {
+                          if (audioRef.current) {
+                            audioRef.current.currentTime = lineSec;
+                            setCurrentTime(lineSec);
+                          }
+                        }}
+                        className={`p-4.5 rounded-xl border transition-all duration-200 cursor-pointer ${
+                          isActive
+                            ? 'bg-indigo-50/80 border-indigo-500 ring-4 ring-indigo-100/50 shadow-md scale-[1.01] stt-active-highlight-tab2'
+                            : 'bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] shadow-sm'
+                        } ${
+                          line.speaker === 'Agent'
+                            ? 'ml-0 mr-12 shadow-sm'
+                            : 'ml-12 mr-0 bg-slate-50/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[11px] mb-2 font-bold tracking-wide">
+                          <span className={`flex items-center gap-2 ${line.speaker === 'Agent' ? 'text-indigo-600' : 'text-emerald-600'}`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            {line.speaker === 'Agent' ? `Agent (${call.agentName})` : `Candidate (${call.candidateName})`}
+                          </span>
+                          <span className="font-mono text-[var(--text-muted)] text-[10px]">{line.time}</span>
+                        </div>
+                        <p className="text-[13.5px] leading-relaxed font-medium text-[var(--text-primary)] whitespace-pre-line">
+                          {renderWordByWordText(line, lineSec, nextLineSec)}
+                        </p>
                       </div>
-                      <p className="text-[13.5px] leading-relaxed font-medium text-[var(--text-primary)] whitespace-pre-line">{line.text}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12 text-[var(--text-muted)] text-xs font-semibold">
-                  No transcript available. Click "Run ChatGPT Audit" to generate transcript.
+                  No transcript available. Click "Run AI Audit" to generate transcript.
                 </div>
               )}
             </div>
