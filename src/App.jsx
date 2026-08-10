@@ -102,7 +102,7 @@ const blobToBase64 = (blob) => {
 
 // Google Gemini API REST client helper
 const callGeminiApi = async (apiKey, payload, retriesLeft = 5) => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+  const url = `/api/gemini-proxy`;
   
   try {
     const response = await fetch(url, {

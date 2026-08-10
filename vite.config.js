@@ -44,6 +44,35 @@ export default defineConfig({
       name: 'slashrtc-audio-proxy',
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
+          if (req.url.startsWith('/api/gemini-proxy')) {
+            try {
+              let bodyText = '';
+              req.on('data', chunk => { bodyText += chunk; });
+              req.on('end', async () => {
+                const apiKey = 'AQ.Ab8RN6KIU-W1ienOfMmHx1AV9rRF7t_D7Lie-1YXtSxkMhlckQ';
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+                
+                const geminiResponse = await fetch(url, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Referer': 'http://localhost:5173/'
+                  },
+                  body: bodyText
+                });
+
+                res.setHeader('Content-Type', geminiResponse.headers.get('content-type') || 'application/json');
+                res.statusCode = geminiResponse.status;
+                const resText = await geminiResponse.text();
+                res.end(resText);
+              });
+            } catch (err) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: { message: err.message } }));
+            }
+            return;
+          }
+
           if (req.url.startsWith('/api/audio-proxy')) {
             const urlObj = new URL(req.url, `http://${req.headers.host}`);
             const audioUrl = urlObj.searchParams.get('url');
