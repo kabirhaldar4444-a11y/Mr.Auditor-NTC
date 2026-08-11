@@ -174,9 +174,25 @@ export default function App() {
 
   // Settings & Session State
   const [slashRtcActive, setSlashRtcActive] = useState(true);
-  const [apiKey, setApiKey] = useState(() => import.meta.env.VITE_OPENAI_API_KEY || localStorage.getItem('openai_api_key') || '');
+  const [apiKey, setApiKey] = useState(() => {
+    // Priority: .env variable → localStorage → empty
+    const envKey = import.meta.env.VITE_OPENAI_API_KEY;
+    const savedKey = localStorage.getItem('openai_api_key');
+    const resolvedKey = envKey || savedKey || '';
+    // If env has a key, always persist it to localStorage so other sessions pick it up
+    if (envKey && envKey !== savedKey) {
+      localStorage.setItem('openai_api_key', envKey);
+    }
+    return resolvedKey;
+  });
 
-  
+  // Persist apiKey to localStorage whenever it changes (e.g. user updates it in Settings)
+  useEffect(() => {
+    if (apiKey) {
+      localStorage.setItem('openai_api_key', apiKey);
+    }
+  }, [apiKey]);
+
   // SlashRTC credential form bindings inside Settings view
   const [username, setUsername] = useState('SupportEngineer');
   const [password, setPassword] = useState('Enginer#321');
@@ -193,6 +209,7 @@ export default function App() {
   const [supabaseKeyInput, setSupabaseKeyInput] = useState(() => import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('supabase_anon_key') || '');
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [dbError, setDbError] = useState(null);
+
 
   // Load calls on mount or when Supabase client config changes
   useEffect(() => {
