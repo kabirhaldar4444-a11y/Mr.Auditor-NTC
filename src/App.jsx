@@ -352,9 +352,8 @@ export default function App() {
     let isRealTranscribed = callToAudit.isRealTranscribed;
 
     try {
-      if (!apiKey) {
-        throw new Error('Missing OpenAI API Key. Please configure your key in Settings.');
-      }
+      // Audio transcription and AI evaluation call the backend Vercel proxies (/api/openai-whisper-proxy and /api/openai-proxy)
+      // which read OPENAI_API_KEY from Vercel environment variables automatically if not set in frontend state.
 
       // STEP 1: If audio URL exists and not yet transcribed — use OpenAI Whisper to transcribe
       if (callToAudit.audioUrl && !isRealTranscribed) {
