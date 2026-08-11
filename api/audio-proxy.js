@@ -1,9 +1,12 @@
-let cachedCookie = '';
 const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+// Module-level cookie cache — persists across warm Vercel invocations
+let cachedCookie = '';
 
 async function performLogin(username, password, portalUrl) {
   const portalOrigin = new URL(portalUrl).origin;
-  console.log(`Logging into SlashRTC portal (${portalOrigin}) as ${username}...`);
+  console.log(`[audio-proxy] Logging into SlashRTC (${portalOrigin}) as ${username}...`);
+
   const loginForm = new URLSearchParams();
   loginForm.append('username', username);
   loginForm.append('password', password);
@@ -18,43 +21,30 @@ async function performLogin(username, password, portalUrl) {
     redirect: 'manual'
   });
 
-  // Support node fetch headers
-  const setCookies = typeof loginResponse.headers.getSetCookie === 'function'
+  const setCookies = loginResponse.headers.getSetCookie
     ? loginResponse.headers.getSetCookie()
-    : loginResponse.headers.get('set-cookie')
-      ? [loginResponse.headers.get('set-cookie')]
-      : [];
-  
+    : (loginResponse.headers.get('set-cookie') ? [loginResponse.headers.get('set-cookie')] : []);
+
   const validCookies = setCookies.filter(c => c.startsWith('ci_session2=') && !c.includes('expires='));
   const finalCookie = validCookies[validCookies.length - 1];
-  
+
   if (finalCookie) {
     cachedCookie = finalCookie.split(';')[0];
-    console.log("SlashRTC session established successfully!");
+    console.log('[audio-proxy] SlashRTC session established.');
     return cachedCookie;
   } else {
-    throw new Error("Could not find session cookie in login response");
+    throw new Error('Could not obtain session cookie from SlashRTC login.');
   }
 }
 
 export default async function handler(req, res) {
-  // Add CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+  if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
-  // Parse query parameters
-  // Vercel serverless requests have query params attached to req.query
-  const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const audioUrl = urlObj.searchParams.get('url') || req.query?.url;
-  const usernameParam = urlObj.searchParams.get('username') || req.query?.username || 'SupportEngineer';
-  const passwordParam = urlObj.searchParams.get('password') || req.query?.password || 'Enginer#321';
-  const portalUrlParam = urlObj.searchParams.get('portalUrl') || req.query?.portalUrl || 'https://aramcoindia.slashrtc.in/index.php/report/dashboardView?1=1';
+  const { url: audioUrl, username = 'SupportEngineer', password = 'Enginer#321', portalUrl = 'https://aramcoindia.slashrtc.in/index.php/report/dashboardView?1=1' } = req.query;
 
   if (!audioUrl) {
     res.status(400).send('Missing url parameter');
@@ -62,46 +52,44 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Login if no cached session
     if (!cachedCookie) {
-      await performLogin(usernameParam, passwordParam, portalUrlParam);
+      await performLogin(username, password, portalUrl);
     }
 
-    console.log(`Proxying audio request for: ${audioUrl}`);
+    console.log(`[audio-proxy] Fetching: ${audioUrl}`);
     let audioResponse = await fetch(audioUrl, {
-      headers: {
-        'Cookie': cachedCookie,
-        'User-Agent': ua
-      }
+      headers: { 'Cookie': cachedCookie, 'User-Agent': ua }
     });
 
-    const isHtml = (audioResponse.headers.get('content-type') || '').includes('text/html');
-    const isRedirect = audioResponse.headers.get('refresh') || audioResponse.status === 302;
-    
+    // Detect HTML response (session expired / redirect to login page)
+    const ct = (audioResponse.headers.get('content-type') || '').toLowerCase();
+    const isHtml = ct.includes('text/html');
+    const isRedirect = audioResponse.status === 302 || audioResponse.headers.get('refresh');
+
     if (isHtml || isRedirect) {
-      console.log("Session expired or redirected. Re-logging in...");
-      await performLogin(usernameParam, passwordParam, portalUrlParam);
-      
+      console.log('[audio-proxy] Session expired. Re-logging in...');
+      cachedCookie = '';
+      await performLogin(username, password, portalUrl);
+
       audioResponse = await fetch(audioUrl, {
-        headers: {
-          'Cookie': cachedCookie,
-          'User-Agent': ua
-        }
+        headers: { 'Cookie': cachedCookie, 'User-Agent': ua }
       });
     }
 
-    // Set headers for response streaming
-    res.setHeader('Content-Type', audioResponse.headers.get('Content-Type') || 'audio/x-wav');
-    if (audioResponse.headers.get('Content-Length')) {
-      res.setHeader('Content-Length', audioResponse.headers.get('Content-Length'));
-    }
+    const finalCt = audioResponse.headers.get('content-type') || 'audio/x-wav';
+    res.setHeader('Content-Type', finalCt);
     res.setHeader('Accept-Ranges', 'bytes');
+    if (audioResponse.headers.get('content-length')) {
+      res.setHeader('Content-Length', audioResponse.headers.get('content-length'));
+    }
 
-    // Send the arrayBuffer back
-    const buffer = await audioResponse.arrayBuffer();
-    res.status(200).send(Buffer.from(buffer));
+    // Stream audio body back to client
+    const arrayBuffer = await audioResponse.arrayBuffer();
+    res.status(200).send(Buffer.from(arrayBuffer));
 
-  } catch (error) {
-    console.error("Audio proxy failed:", error);
-    res.status(500).send(`Proxy Error: ${error.message}`);
+  } catch (err) {
+    console.error('[audio-proxy] Error:', err.message);
+    res.status(500).send(`Audio proxy error: ${err.message}`);
   }
 }

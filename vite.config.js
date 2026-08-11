@@ -184,6 +184,4 @@ export default defineConfig({
       }
     }
   ],
-  // GitHub Pages — set base to repo name for production builds
-  base: process.env.NODE_ENV === 'production' ? '/Mr.Auditor-NTC/' : '/',
 })
