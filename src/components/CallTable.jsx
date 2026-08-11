@@ -103,7 +103,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
   const [agentFilter, setAgentFilter] = useState(initialAgentFilter);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(50);
   const [dateFilter, setDateFilter] = useState('');
 
   // Dynamic Column Selector States
@@ -121,14 +121,14 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
   if (calls.length === 0) {
     return (
-      <div className="card-white p-12 text-center flex flex-col items-center justify-center space-y-6 border border-slate-200 shadow-md">
-        <div className="w-16 h-16 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm animate-pulse">
-          <FileSpreadsheet className="w-8 h-8" />
+      <div className="card-white p-12 text-center flex flex-col items-center justify-center space-y-6">
+        <div className="w-14 h-14 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 flex items-center justify-center text-indigo-400 shadow-sm animate-pulse">
+          <FileSpreadsheet className="w-6 h-6" />
         </div>
         
         <div className="space-y-2 max-w-md mx-auto">
-          <h3 className="text-lg font-extrabold text-[var(--text-primary)]">No Audits Logged Yet</h3>
-          <p className="text-xs text-[var(--text-secondary)] leading-relaxed font-medium">
+          <h3 className="text-base font-extrabold text-[var(--text-primary)]">No Audits Logged Yet</h3>
+          <p className="text-xs text-[var(--text-muted)] leading-relaxed font-medium">
             Your call recordings database is empty. Import your CSV or Excel call report exported from the SlashRTC dialer to run automated AI compliance audits.
           </p>
         </div>
@@ -136,7 +136,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
         <div>
           <button
             onClick={onOpenUpload}
-            className="btn-primary text-xs font-bold py-2.5 px-6 shadow-md"
+            className="btn-primary text-xs font-bold py-2 px-5 shadow-md flex items-center gap-1.5"
           >
             <FileSpreadsheet className="w-4 h-4 text-white" />
             <span>Upload Batch Dataset</span>
@@ -290,20 +290,20 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
   };
 
   return (
-    <div className="card-white overflow-hidden shadow-sm transition-all duration-300 relative">
+    <div className="card-white overflow-hidden shadow-sm transition-all duration-300 relative flex flex-col">
       
       {/* Top Filter & Search Controls */}
-      <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-card-subtle)]/40 backdrop-blur-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="p-5 border-b border-[var(--border-color)] bg-gray-50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         
         {/* Search Bar */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3.5" />
+        <div className="relative flex-1 min-w-[280px] lg:max-w-md">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="Search candidate, phone, agent name, email, call ID..."
+            placeholder="Search candidate, lead ID, agent or filters..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-            className="input-field pl-10 py-2.5 text-xs sm:text-sm bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)]"
+            className="input-field pl-10 py-2.5 text-sm"
           />
         </div>
 
@@ -314,20 +314,20 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-            className="input-field py-2.5 text-xs font-semibold w-auto bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] cursor-pointer"
+            className="input-field py-2.5 text-sm w-auto cursor-pointer"
           >
             <option value="ALL">All Statuses ({calls.length})</option>
             <option value="AUDITED">Audited Only</option>
             <option value="PENDING">Pending AI Audit</option>
             <option value="PASSED">Passed Compliant</option>
-            <option value="FAIL">Critical Compliance Fail</option>
+            <option value="FAIL">Critical Fail</option>
           </select>
 
           {/* Agent Filter */}
           <select
             value={agentFilter}
             onChange={(e) => { setAgentFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-            className="input-field py-2.5 text-xs font-semibold w-auto bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] cursor-pointer"
+            className="input-field py-2.5 text-sm w-auto cursor-pointer"
           >
             <option value="ALL">All Agents ({uniqueAgents.length})</option>
             {uniqueAgents.map(ag => (
@@ -339,7 +339,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
           <select
             value={campaignFilter}
             onChange={(e) => { setCampaignFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-            className="input-field py-2.5 text-xs font-semibold w-auto bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] cursor-pointer"
+            className="input-field py-2.5 text-sm w-auto cursor-pointer"
           >
             <option value="ALL">All Campaigns ({uniqueCampaigns.length})</option>
             {uniqueCampaigns.map(camp => (
@@ -348,21 +348,21 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
           </select>
 
           {/* Date Filter */}
-          <div className="flex items-center gap-1.5 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-lg px-2.5 py-1">
-            <span className="text-[10px] font-extrabold uppercase text-[var(--text-muted)] tracking-wider">Date:</span>
+          <div className="flex items-center gap-2 bg-white border border-[var(--border-color)] rounded-lg px-3.5 py-2">
+            <span className="text-[12px] font-semibold text-[var(--text-muted)]">Date:</span>
             <input 
               type="date"
               value={dateFilter}
               onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-              className="bg-transparent border-none text-xs font-semibold text-[var(--text-primary)] outline-none cursor-pointer p-0.5"
+              className="bg-transparent border-none text-sm text-[var(--text-primary)] outline-none cursor-pointer p-0 min-w-[110px]"
             />
             {dateFilter && (
               <button 
                 onClick={() => { setDateFilter(''); setCurrentPage(1); setSelectedIds(new Set()); }}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 cursor-pointer ml-1"
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 cursor-pointer"
                 title="Clear Date Filter"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3 h-3" />
               </button>
             )}
           </div>
@@ -371,21 +371,20 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
           <div className="relative">
             <button
               onClick={() => setShowColumnsPopover(!showColumnsPopover)}
-              className="btn-secondary py-2.5 px-3.5 text-xs font-bold bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              className="btn-secondary py-2 px-3 text-xs font-bold flex items-center gap-1.5 shadow-2xs"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>Columns Manager ({visibleColumns.size})</span>
+              <span>Columns ({visibleColumns.size})</span>
             </button>
             
             {showColumnsPopover && (
-              <div className="absolute right-0 mt-2 w-72 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl shadow-xl p-3.5 z-30 flex flex-col gap-2 max-h-96 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150 text-left">
-                <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-2 mb-1.5">
-                  <span className="font-extrabold text-xs text-[var(--text-primary)]">Select Table Columns</span>
+              <div className="absolute right-0 mt-2 w-64 bg-white border border-[var(--border-color)] rounded-xl shadow-lg p-4 z-30 flex flex-col gap-2 max-h-96 overflow-y-auto text-left">
+                <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-2 mb-1">
+                  <span className="font-semibold text-sm text-[var(--text-primary)]">Visible Columns</span>
                   <button 
                     onClick={() => setVisibleColumns(new Set(DEFAULT_COLUMNS))}
-                    className="text-[10px] text-blue-500 hover:text-blue-600 font-bold"
-                  >
-                    Reset Default
+                    className="text-[12px] text-indigo-600 hover:text-indigo-700 font-medium">
+                    Reset
                   </button>
                 </div>
                 
@@ -394,29 +393,26 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                   placeholder="Search columns..."
                   value={columnSearchQuery}
                   onChange={(e) => setColumnSearchQuery(e.target.value)}
-                  className="input-field py-1.5 px-3 text-xs bg-[var(--bg-card-subtle)] border-[var(--border-color)]"
+                  className="input-field py-1.5 px-3 text-sm"
                 />
                 
-                <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 pr-1 mt-1.5">
+                <div className="flex flex-col gap-1 overflow-y-auto flex-1 pr-1 mt-1 font-sans">
                   {allAvailableColumns
                     .filter(col => col.toLowerCase().includes(columnSearchQuery.toLowerCase()))
                     .map(col => {
                       const isChecked = visibleColumns.has(col);
                       return (
-                        <label key={col} className="flex items-center gap-2 cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-subtle)]/40 p-1.5 rounded-lg transition-colors">
+                        <label key={col} className="flex items-center gap-2.5 cursor-pointer text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-gray-50 p-1.5 rounded-lg transition-colors">
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => {
                               const next = new Set(visibleColumns);
-                              if (isChecked) {
-                                next.delete(col);
-                              } else {
-                                next.add(col);
-                              }
+                              if (isChecked) next.delete(col);
+                              else next.add(col);
                               setVisibleColumns(next);
                             }}
-                            className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                            className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
                           />
                           <span className="truncate">{col}</span>
                         </label>
@@ -432,24 +428,24 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
       </div>
 
       {/* Main Call Table */}
-      <div className="overflow-x-auto w-full">
+      <div className="overflow-x-auto w-full flex-1">
         <table className="w-full text-left border-collapse min-w-max">
           <thead>
-            <tr className="bg-[var(--bg-card-subtle)]/50 border-b border-[var(--border-color)] text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+            <tr className="bg-gray-50 border-b border-[var(--border-color)] text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
               {/* Checkbox Header */}
-              <th className="py-3 px-4 w-10 text-center">
+              <th className="py-3.5 px-4 w-10 text-center">
                 <input
                   type="checkbox"
                   checked={paginatedCalls.length > 0 && paginatedCalls.every(c => selectedIds.has(c.id))}
                   onChange={toggleSelectAll}
-                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                  className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
                 />
               </th>
               {/* Visible dynamic columns */}
               {Array.from(visibleColumns).map(colName => {
                 const isFiltered = activeColumnFilters[colName] && activeColumnFilters[colName].size > 0;
                 return (
-                  <th key={colName} className="py-3 px-5 whitespace-nowrap text-left relative group">
+                  <th key={colName} className="py-3 px-4 whitespace-nowrap text-left relative group">
                     <div 
                       className="flex items-center gap-1.5 cursor-pointer select-none"
                       onClick={(e) => {
@@ -462,14 +458,14 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                         }
                       }}
                     >
-                      <span className="font-extrabold text-[11px] text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-colors">{colName}</span>
-                      <Filter className={`w-3 h-3 ${isFiltered ? 'text-blue-500 fill-blue-500/10' : 'text-[var(--text-muted)]/50 group-hover:text-[var(--text-primary)]'} transition-colors`} />
+                      <span className="font-extrabold text-[10px] text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-colors">{colName}</span>
+                      <Filter className={`w-2.5 h-2.5 ${isFiltered ? 'text-indigo-400 fill-indigo-500/5' : 'text-[var(--text-muted)]/40 group-hover:text-[var(--text-primary)]'} transition-colors`} />
                     </div>
 
                     {openFilterColumn === colName && (
-                      <div className="absolute left-4 top-full mt-2 w-64 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl shadow-xl p-3 z-45 text-left font-sans flex flex-col gap-2 normal-case tracking-normal text-[var(--text-primary)]">
-                        <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-2">
-                          <span className="font-extrabold text-xs text-[var(--text-primary)] truncate max-w-[150px]">Filter {colName}</span>
+                      <div className="absolute left-4 top-full mt-2 w-60 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl shadow-xl p-3 z-45 text-left font-sans flex flex-col gap-2 normal-case tracking-normal text-[var(--text-primary)]">
+                        <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-2 mb-0.5">
+                          <span className="font-extrabold text-[11px] text-[var(--text-primary)] truncate max-w-[140px]">Filter {colName}</span>
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
@@ -478,7 +474,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                               setActiveColumnFilters(next);
                               setOpenFilterColumn(null);
                             }}
-                            className="text-[10px] text-blue-500 hover:text-blue-600 font-bold"
+                            className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold"
                           >
                             Clear
                           </button>
@@ -490,10 +486,10 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                           value={columnValSearch}
                           onChange={(e) => setColumnValSearch(e.target.value)}
                           onClick={(e) => e.stopPropagation()}
-                          className="input-field py-1.5 px-2.5 text-xs bg-[var(--bg-card-subtle)] border-[var(--border-color)]"
+                          className="input-field py-1 px-2 text-xs bg-[var(--bg-card-subtle)] border-[var(--border-color)]"
                         />
 
-                        <div className="flex flex-col gap-1.5 overflow-y-auto flex-1 pr-1 max-h-48 mt-1.5">
+                        <div className="flex flex-col gap-1 overflow-y-auto flex-1 pr-1 max-h-40 mt-1">
                           {currentUniqueValues
                             .filter(item => item.val.toLowerCase().includes(columnValSearch.toLowerCase()))
                             .map(item => {
@@ -501,7 +497,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                               const isChecked = selectedSet.has(item.val);
                               
                               return (
-                                <label key={item.val} className="flex items-center justify-between gap-2 cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-subtle)]/40 p-1.5 rounded-lg transition-colors">
+                                <label key={item.val} className="flex items-center justify-between gap-2 cursor-pointer text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-subtle)] p-1 rounded-lg transition-colors">
                                   <div className="flex items-center gap-2 truncate">
                                     <input
                                       type="checkbox"
@@ -523,7 +519,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                                         setActiveColumnFilters(nextFilters);
                                       }}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                                      className="w-3.5 h-3.5 text-indigo-500 rounded border-slate-700 focus:ring-indigo-500 cursor-pointer"
                                     />
                                     <span className="truncate">{item.val}</span>
                                   </div>
@@ -546,19 +542,19 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                   </th>
                 );
               })}
-              <th className="py-3 px-5 text-center whitespace-nowrap">Script Score</th>
-              <th className="py-3 px-5 text-center whitespace-nowrap">Compliance Badge</th>
-              <th className="py-3 px-5 text-right whitespace-nowrap">Actions</th>
+              <th className="py-3 px-5 text-center whitespace-nowrap text-[10px] font-extrabold">Script Score</th>
+              <th className="py-3 px-5 text-center whitespace-nowrap text-[10px] font-extrabold">Compliance Badge</th>
+              <th className="py-3 px-5 text-right whitespace-nowrap text-[10px] font-extrabold">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--border-color)] text-xs font-medium text-[var(--text-secondary)]">
+          <tbody className="divide-y divide-[var(--border-color)] text-sm text-[var(--text-secondary)]">
             {paginatedCalls.length === 0 ? (
               <tr>
-                <td colSpan={visibleColumns.size + 4} className="py-12 text-center text-[var(--text-muted)]">
-                  <div className="flex flex-col items-center justify-center">
-                    <FileSpreadsheet className="w-10 h-10 text-[var(--text-muted)] opacity-50 mb-2" />
-                    <p className="font-bold text-[var(--text-primary)]">No calls matched your filter</p>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">Try clearing filters or search query</p>
+                <td colSpan={visibleColumns.size + 4} className="py-16 text-center text-[var(--text-muted)]">
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <FileSpreadsheet className="w-10 h-10 text-[var(--text-muted)] opacity-35" />
+                    <p className="font-bold text-[var(--text-primary)]">No audits match your filter criteria</p>
+                    <p className="text-xs text-[var(--text-muted)]">Try adjusting search term or clearing grid filters</p>
                   </div>
                 </td>
               </tr>
@@ -566,18 +562,18 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
               paginatedCalls.map((call) => (
                 <tr 
                   key={call.id}
-                  className={`hover:bg-[var(--bg-card-subtle)]/30 transition-colors group ${
-                    selectedIds.has(call.id) ? 'bg-blue-500/5 hover:bg-blue-500/10' : ''
+                  className={`hover:bg-gray-50 transition-colors group ${
+                    selectedIds.has(call.id) ? 'bg-indigo-50 hover:bg-indigo-50/80' : ''
                   }`}
                 >
                   
                   {/* Checkbox */}
-                  <td className="py-3 px-4 text-center">
+                  <td className="py-3.5 px-4 text-center">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(call.id)}
                       onChange={() => toggleSelect(call.id)}
-                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
                     />
                   </td>
 
@@ -587,14 +583,14 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                     
                     if (colName === 'RECORDING PATH' || colName === 'RECORDING_PATH' || colName === 'audioUrl') {
                       return (
-                        <td key={colName} className="py-3 px-5 whitespace-nowrap">
+                        <td key={colName} className="py-3 px-4 whitespace-nowrap">
                           <button
                             onClick={() => onSelectCall(call)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 text-[11px] font-bold border border-indigo-500/20 transition-all duration-200"
-                            title="Open SlashRTC Audio Player"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-[12px] font-medium border border-indigo-200 transition-colors"
+                            title="Play Recording"
                           >
                             <Play className="w-3 h-3 fill-current" />
-                            <span>SlashRTC Audio</span>
+                            <span>Play</span>
                           </button>
                         </td>
                       );
@@ -602,7 +598,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
                     if (colName === 'name' || colName === 'CandidateName' || colName === 'Candidate_Name') {
                       return (
-                        <td key={colName} className="py-3 px-5 whitespace-nowrap font-bold text-[var(--text-primary)]">
+                        <td key={colName} className="py-3 px-4 whitespace-nowrap font-extrabold text-[var(--text-primary)]">
                           {value || '-'}
                         </td>
                       );
@@ -610,16 +606,16 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
                     if (colName === 'email' || colName === 'CUSTOMER EMAIL' || colName === 'Candidate_Email' || colName === 'CandidateEmailAddress/AlternativeEmailAddress') {
                       return (
-                        <td key={colName} className="py-3 px-5 whitespace-nowrap text-[var(--text-secondary)] font-mono text-[11px]">
+                        <td key={colName} className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] font-mono text-[10px]">
                           {value || '-'}
                         </td>
                       );
                     }
 
                     return (
-                      <td key={colName} className="py-3 px-5 whitespace-nowrap text-[var(--text-secondary)] max-w-xs truncate">
+                      <td key={colName} className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] max-w-[200px] truncate">
                         {value === '--' || !value ? (
-                          <span className="text-[var(--text-muted)] opacity-50">-</span>
+                          <span className="text-[var(--text-muted)] opacity-40">-</span>
                         ) : typeof value === 'object' ? (
                           String(JSON.stringify(value))
                         ) : (
@@ -630,19 +626,19 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                   })}
 
                   {/* Script Adherence Score */}
-                  <td className="py-3 px-5 text-center font-bold">
+                  <td className="py-3 px-5 text-center font-bold font-mono">
                     {call.status === 'Audited' ? (
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-extrabold ${
-                        call.overallScore >= 80 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                        call.overallScore >= 60 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                        'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      <span className={`inline-block px-2.5 py-1 rounded-full text-[12px] font-bold font-mono ${
+                        call.overallScore >= 80 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                        call.overallScore >= 60 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                        'bg-red-50 text-red-700 border border-red-200'
                       }`}>
                         {call.overallScore}%
                       </span>
                     ) : call.status === 'Failed' ? (
-                      <span className="text-rose-500 text-xs font-extrabold">Failed</span>
+                      <span className="text-red-600 text-sm font-semibold">Failed</span>
                     ) : (
-                      <span className="text-[var(--text-muted)] text-[11px] italic">Not Audited</span>
+                      <span className="text-gray-400 text-[12px] italic">Pending</span>
                     )}
                   </td>
 
@@ -671,16 +667,16 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                   </td>
 
                   {/* Actions */}
-                  <td className="py-3 px-5 text-right">
+                  <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       
                       {/* Inspect / Play Details Button */}
                       <button
                         onClick={() => onSelectCall(call)}
-                        className="btn-secondary py-1.5 px-3 text-xs text-[var(--text-primary)] border-[var(--border-color)] bg-[var(--bg-card-solid)] hover:bg-[var(--bg-card-subtle)] font-bold transition-all animate-none"
-                        title="View Transcript & AI Score Breakdown"
+                        className="btn-secondary py-1 px-2.5 text-[11px] font-bold shadow-sm"
+                        title="Inspect Script Audit Details"
                       >
-                        <Eye className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                        <Eye className="w-3 h-3 text-[var(--text-secondary)]" />
                         <span>Inspect</span>
                       </button>
 
@@ -688,13 +684,13 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                       <button
                         onClick={() => onAuditSingleCall(call)}
                         disabled={isAuditingId === call.id}
-                        className="btn-primary py-1.5 px-3 text-xs font-bold transition-all"
-                        title="Analyze call with ChatGPT AI"
+                        className="btn-primary py-1 px-2.5 text-[11px] font-bold shadow-sm"
+                        title="Evaluate script compliance via AI"
                       >
                         {isAuditingId === call.id ? (
-                          <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                          <Sparkles className="w-3 h-3 animate-spin" />
                         ) : (
-                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <Sparkles className="w-3 h-3 text-amber-300" />
                         )}
                         <span>{call.status === 'Audited' ? 'Re-Audit' : 'AI Audit'}</span>
                       </button>
@@ -710,26 +706,45 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
       </div>
 
       {/* Pagination Footer */}
-      <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-card-subtle)]/40 text-xs text-[var(--text-secondary)] font-medium flex items-center justify-between transition-colors">
-        <div>
-          Showing <strong>{Math.min((currentPage - 1) * pageSize + 1, filteredCalls.length)}</strong> to <strong>{Math.min(currentPage * pageSize, filteredCalls.length)}</strong> of <strong>{filteredCalls.length.toLocaleString()}</strong> calls
+      <div className="px-6 py-4 border-t border-[var(--border-color)] bg-gray-50 text-[13px] text-[var(--text-muted)] font-medium flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4">
+          <div>
+            Showing <strong className="text-[var(--text-secondary)]">{Math.min((currentPage - 1) * pageSize + 1, filteredCalls.length)}</strong> to <strong className="text-[var(--text-secondary)]">{Math.min(currentPage * pageSize, filteredCalls.length)}</strong> of <strong className="text-[var(--text-secondary)]">{filteredCalls.length.toLocaleString()}</strong> records
+          </div>
+
+          <div className="flex items-center gap-2 border-l border-gray-200 pl-4">
+            <span className="text-xs font-semibold text-gray-500">Page Size:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-white border border-gray-300 text-gray-700 text-xs rounded-lg px-2 py-1 font-bold cursor-pointer hover:border-indigo-500 focus:outline-none"
+            >
+              <option value={10}>10 per page</option>
+              <option value={25}>25 per page</option>
+              <option value={50}>50 per page (Default)</option>
+              <option value={100}>100 per page</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            className="p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card-solid)] text-[var(--text-secondary)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--bg-card-subtle)] transition-all duration-200"
+            className="p-1 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card-subtle)] text-[var(--text-secondary)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--bg-card-solid)] transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           
-          <span className="font-bold text-[var(--text-primary)] px-2">Page {currentPage} of {totalPages}</span>
+          <span className="font-bold text-[var(--text-primary)] px-1">Page {currentPage} of {totalPages}</span>
 
           <button
             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
-            className="p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card-solid)] text-[var(--text-secondary)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--bg-card-subtle)] transition-all duration-200"
+            className="p-1 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card-subtle)] text-[var(--text-secondary)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--bg-card-solid)] transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -738,36 +753,36 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
       {/* Floating Batch Actions Bar */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white rounded-xl shadow-xl px-5 py-3 flex items-center gap-4 z-40 transition-all animate-in fade-in slide-in-from-bottom-4 duration-300 font-semibold text-xs border border-slate-800">
-          <span className="text-slate-300">
-            Selected <strong className="text-white font-extrabold">{selectedIds.size}</strong> calls
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white text-[var(--text-primary)] rounded-xl shadow-xl px-6 py-3.5 flex items-center gap-5 z-40 transition-all border border-[var(--border-color)] animate-in fade-in slide-in-from-bottom-4 duration-200 text-sm font-medium">
+          <span className="text-[var(--text-muted)]">
+            Selected <strong className="text-[var(--text-primary)] font-semibold font-mono">{selectedIds.size}</strong> calls
           </span>
           
-          <div className="w-px h-4 bg-slate-700"></div>
+          <div className="w-[1px] h-4 bg-gray-200"></div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handleBatchAudit}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-bold transition-all active:scale-95 cursor-pointer"
+              className="btn-primary py-2 px-4 text-sm font-semibold flex items-center gap-1.5"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-              <span>AI Audit Selected</span>
+              <Zap className="w-3.5 h-3.5" />
+              <span>AI Audit Selected ({selectedIds.size} Calls)</span>
             </button>
 
             <button
               onClick={handleBatchDelete}
-              className="bg-slate-800 hover:bg-slate-700 text-rose-400 hover:text-rose-300 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-bold transition-all active:scale-95 cursor-pointer"
+              className="btn-secondary py-2 px-4 text-sm font-medium text-red-600 hover:bg-red-50 border-red-200"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Delete</span>
             </button>
           </div>
 
-          <div className="w-px h-4 bg-slate-700"></div>
+          <div className="w-[1px] h-4 bg-gray-200"></div>
 
           <button 
             onClick={() => setSelectedIds(new Set())}
-            className="text-slate-400 hover:text-white transition-colors"
+            className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
           >
             Cancel
           </button>

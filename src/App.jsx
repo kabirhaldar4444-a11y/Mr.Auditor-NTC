@@ -100,42 +100,36 @@ const blobToBase64 = (blob) => {
   });
 };
 
-// Google Gemini API REST client helper
-const callGeminiApi = async (apiKey, payload, retriesLeft = 5) => {
-  const url = `/api/gemini-proxy`;
-  
+// OpenAI Chat Completions API client helper — calls through local vite proxy (works on any machine/browser)
+const callOpenAiApi = async (apiKey, messages, retriesLeft = 3) => {
+  const url = `/api/openai-proxy`;
+
+  const payload = {
+    model: 'gpt-4o-mini',
+    messages,
+    temperature: 0.2,
+    response_format: { type: 'json_object' }
+  };
+
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey || ''
       },
       body: JSON.stringify(payload)
     });
 
-    // Handle Rate Limit Error (HTTP 429)
     if (response.status === 429 && retriesLeft > 0) {
-      const errText = await response.text();
-      let delayMs = 15000; // Default wait 15 seconds
-      
-      try {
-        const errJson = JSON.parse(errText);
-        const errMsg = errJson.error?.message || '';
-        // Extract retry delay from message (e.g., "Please retry in 11.481715445s.")
-        const match = errMsg.match(/retry in ([\d\.]+)s/i);
-        if (match && match[1]) {
-          delayMs = Math.ceil(parseFloat(match[1]) * 1000) + 1500; // Add 1.5s buffer
-        }
-      } catch (_) {}
-      
-      console.warn(`Gemini API Rate limit (429) hit. Waiting ${delayMs / 1000}s before retrying... (${retriesLeft} retries left)`);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-      return callGeminiApi(apiKey, payload, retriesLeft - 1);
+      console.warn(`OpenAI rate limit hit (429). Waiting 10s before retrying... (${retriesLeft} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      return callOpenAiApi(apiKey, messages, retriesLeft - 1);
     }
 
     if (!response.ok) {
       const errText = await response.text();
-      let errMsg = `Gemini API error: ${response.status}`;
+      let errMsg = `OpenAI API error: ${response.status}`;
       try {
         const errJson = JSON.parse(errText);
         errMsg = errJson.error?.message || errMsg;
@@ -144,26 +138,26 @@ const callGeminiApi = async (apiKey, payload, retriesLeft = 5) => {
     }
 
     const data = await response.json();
-    const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const textResponse = data.choices?.[0]?.message?.content;
     if (!textResponse) {
-      throw new Error("Gemini API returned an empty response.");
+      throw new Error('OpenAI API returned an empty response.');
     }
 
-    // Handle markdown formatting blocks if Gemini outputs them (e.g. ```json ... ```)
-    const cleanJsonText = textResponse.replace(/^```json\s*|```\s*$/g, '').trim();
-    return JSON.parse(cleanJsonText);
+    // Strip markdown code blocks if present
+    const cleanJson = textResponse.replace(/^```json\s*|```\s*$/g, '').trim();
+    return JSON.parse(cleanJson);
   } catch (err) {
-    if (retriesLeft > 0 && (err.message?.includes('429') || err.message?.includes('Quota exceeded'))) {
-      console.warn(`Retrying caught rate limit error: ${err.message}. Waiting 15s...`);
-      await new Promise(resolve => setTimeout(resolve, 15000));
-      return callGeminiApi(apiKey, payload, retriesLeft - 1);
+    if (retriesLeft > 0 && (err.message?.includes('429') || err.message?.includes('rate limit'))) {
+      console.warn(`Retrying after rate limit: ${err.message}. Waiting 10s...`);
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      return callOpenAiApi(apiKey, messages, retriesLeft - 1);
     }
     throw err;
   }
 };
 
 export default function App() {
-  const [calls, setCalls] = useState([]);
+  const [calls, setCalls] = useState(SAMPLE_INITIAL_DATA);
   const [selectedCall, setSelectedCall] = useState(null);
   
   // Navigation View Selection
@@ -180,7 +174,8 @@ export default function App() {
 
   // Settings & Session State
   const [slashRtcActive, setSlashRtcActive] = useState(true);
-  const [apiKey, setApiKey] = useState(() => 'AQ.Ab8RN6KIU-W1ienOfMmHx1AV9rRF7t_D7Lie-1YXtSxkMhlckQ');
+  const [apiKey, setApiKey] = useState(() => import.meta.env.VITE_OPENAI_API_KEY || localStorage.getItem('openai_api_key') || '');
+
   
   // SlashRTC credential form bindings inside Settings view
   const [username, setUsername] = useState('SupportEngineer');
@@ -207,8 +202,7 @@ export default function App() {
       
       const supabase = getSupabaseClient();
       if (!supabase) {
-        // Start with empty state if Supabase is not configured
-        setCalls([]);
+        setCalls(SAMPLE_INITIAL_DATA);
         setIsDbLoading(false);
         return;
       }
@@ -333,9 +327,10 @@ export default function App() {
 
     try {
       if (!apiKey) {
-        throw new Error("Missing Gemini API Key. Please configure your key in Settings.");
+        throw new Error('Missing OpenAI API Key. Please configure your key in Settings.');
       }
 
+      // STEP 1: If audio URL exists and not yet transcribed — use OpenAI Whisper to transcribe
       if (callToAudit.audioUrl && !isRealTranscribed) {
         setAuditProgressStatus('Fetching audio...');
         const audioProxyUrl = `/api/audio-proxy?url=${encodeURIComponent(callToAudit.audioUrl)}&username=${encodeURIComponent(username || '')}&password=${encodeURIComponent(password || '')}&portalUrl=${encodeURIComponent(portalUrl || '')}`;
@@ -344,282 +339,211 @@ export default function App() {
           return res.blob();
         });
 
-        setAuditProgressStatus('Evaluating Audio (Gemini)...');
-        const base64Data = await blobToBase64(audioBlob);
+        // If audio is empty or too small, skip to transcript-only audit
+        if (audioBlob.size < 1000) {
+          console.warn('Audio blob too small — likely an auth redirect or empty response. Skipping Whisper.');
+        } else {
+          setAuditProgressStatus('Transcribing Audio (Whisper)...');
 
-        const promptText = `You are a Senior QA Compliance Auditor evaluating a candidate screening call.
-Perform three tasks:
-1. Identify speakers ("Agent" and "Candidate"), transcribe and diarize the conversation with start times, and format it as segments (each segment with speaker, time in MM:SS, and text).
-   - CRITICAL REQUIREMENT: You MUST transcribe the conversation EXACTLY word-for-word (literal transcript). Do NOT paraphrase, summarize, omit words, or correct grammar/filler words.
-   - The transcript must be 100% identical and similar to the spoken audio.
-   - Transcribe in the language spoken: if they speak in Hinglish (Hindi/English mix), write down the exact Hinglish/Hindi words in Latin script or Devnagari.
-   - Do NOT bias the transcript to match the compliance checkpoints or templates. If the agent deviates, makes mistakes, uses prohibited terms (like "Sir" or "Ma'am"), or skips parts, the transcript MUST capture those exact words and deviations.
-2. Perform a compliance script audit against the 10 checkpoints and compliance red flags.
-3. Audit the call's technical voice quality and soft skills.
+          // ── Magic-bytes detection ──────────────────────────────────────────
+          // Read first 12 bytes to identify real file format, ignoring MIME type
+          // (SlashRTC generateLink may return audio/x-wav, octet-stream, etc.)
+          const headerBuffer = await audioBlob.slice(0, 12).arrayBuffer();
+          const hdr = new Uint8Array(headerBuffer);
 
-The audio is a recording of an HR Relationship Manager screening a job seeker. It can be in English, Hindi, or a mix of English and Hindi (Hinglish). You must detect the language, understand the meaning, and evaluate compliance and diarization segment content accurately based on the literal transcript of the audio.
-
-SCRIPT CHECKPOINTS (Evaluate as true/false):
-- CP1 (greetingPassed): Introduce themselves as a Relationship Manager from Naukri.com, verify the candidate's name, and ask if it's a good time to connect. Maintain a neutral tone & AVOID 'Sir/Ma'am'.
-- CP2 (hrIntroPassed): State the job opportunity with premium hiring partners, mention the call is recorded, state that Naukri never asks for money, and state that we do not guarantee job offers.
-- CP3 (eligibilityPassed): Confirm if the candidate is open to a job switch or new job, and ask for their current/last job title.
-- CP4 (companyOverviewPassed): Pitch DPR Construction as a multinational engineering company delivering roads, metro, railway, power, mining, manufacturing, and high-rise infrastructure, with offices in Mumbai BKC, Paris, Dubai, Tokyo, Australia, Mexico, and official website www.dprusa.in.
-- CP5 (screeningQuestionsPassed): Address candidate's applied cases (Case 1: re-apply under fresh cycles without cost, Case 2: considered for future assignments).
-- CP6 (globalPitchPassed): Ask verification questions: total years of experience, current employment, last organization, key roles, department, education, graduation year, certifications, current salary, expected salary, interviewed in 6 months, age, and joining timeline.
-- CP7 (behavioralPassed): Mention domestic locations (Mumbai, Pune, Chennai, Delhi NCR) or international sites (Tokyo, Dubai, Paris).
-- CP8 (certificationsPassed): State corporate benefits (EPF, ESIC, family medical insurance, gratuity, performance bonus, travel allowance, site accommodation) and explain certifications like PMP, AutoCAD, Primavera P6, or Revit are mandatory.
-- CP9 (joiningBonusPassed): Mention registration link, resume upload, and 10% sign-on joining bonus if joining within 30 days.
-- CP10 (websiteRedirectPassed): Direct the candidate to visit www.dprusa.in for branch address and project details.
-
-COMPLIANCE RED FLAGS (Deduct points if found):
-1. Used formal titles like "Sir" or "Ma'am" (RF_USED_SIR_MAAM, Severity: MEDIUM). Deduct 5 points.
-2. Paid Fake Certification Selling Violation: Agent tells candidate they can get/buy a certificate without study/exams (RF_FAKE_CERT_SELLING, Severity: CRITICAL). Deduct 50 points.
-3. Demand of Upfront Fee or Processing Charges: Asking candidate to pay money or deposit for certification or job registration, instead of emphasizing that Naukri never asks for money (RF_UNAUTHORIZED_FEE, Severity: CRITICAL). Deduct 100 points.
-4. Missing Mandatory Website Navigation: Failure to direct the candidate to navigate to www.dprusa.in (RF_MISSING_WEBSITE_REDIRECT, Severity: HIGH). Deduct 15 points.
-
-TECHNICAL & QUALITY EVALUATIONS:
-- Voice Clarity: Is the audio volume good and voice clear? Value: "Good" or "Muffled / Low Volume".
-- Connectivity / Network Issues: Any voice breakups, network latency delays, or long silences? Value: "None" or "Voice Breakups / Latency".
-- Ambient Background Noise: Any traffic, keyboard clicks, static, or background talk? Value: "None" or "High Static / Center Noise".
-- Agent Tone & Attitude: Professional, polite and empathetic, or impatient/robotic? Value: "Professional & Polite" or "Impatient / Robotic".
-- Agent Speaking Pacing: Is speaking speed normal, too fast, or too slow? Value: "Normal", "Too Fast", "Too Slow".
-- Candidate Sentiment: How does the candidate sound? Value: "Interested", "Neutral", "Frustrated / Refused".
-
-Please return the diarized segments and complete compliance audit results matching the response schema.`;
-
-        const payload = {
-          contents: [
-            {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: audioBlob.type || 'audio/wav',
-                    data: base64Data
-                  }
-                },
-                {
-                  text: promptText
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: 'OBJECT',
-              properties: {
-                diarizedSegments: {
-                  type: 'ARRAY',
-                  items: {
-                    type: 'OBJECT',
-                    properties: {
-                      speaker: { type: 'STRING', enum: ['Agent', 'Candidate'] },
-                      time: { type: 'STRING' },
-                      text: { type: 'STRING' }
-                    },
-                    required: ['speaker', 'time', 'text']
-                  }
-                },
-                overallScore: { type: 'INTEGER' },
-                complianceStatus: { type: 'STRING', enum: ['Passed', 'Critical Fail'] },
-                redFlags: {
-                  type: 'ARRAY',
-                  items: {
-                    type: 'OBJECT',
-                    properties: {
-                      code: { type: 'STRING' },
-                      severity: { type: 'STRING' },
-                      title: { type: 'STRING' },
-                      snippet: { type: 'STRING' }
-                    },
-                    required: ['code', 'severity', 'title', 'snippet']
-                  }
-                },
-                callQuality: {
-                  type: 'OBJECT',
-                  properties: {
-                    voiceClarity: { type: 'STRING' },
-                    networkIssues: { type: 'STRING' },
-                    backgroundNoise: { type: 'STRING' },
-                    agentTone: { type: 'STRING' },
-                    agentPacing: { type: 'STRING' },
-                    candidateSentiment: { type: 'STRING' }
-                  },
-                  required: ['voiceClarity', 'networkIssues', 'backgroundNoise', 'agentTone', 'agentPacing', 'candidateSentiment']
-                },
-                evaluation: {
-                  type: 'OBJECT',
-                  properties: {
-                    greetingPassed: { type: 'BOOLEAN' },
-                    hrIntroPassed: { type: 'BOOLEAN' },
-                    eligibilityPassed: { type: 'BOOLEAN' },
-                    companyOverviewPassed: { type: 'BOOLEAN' },
-                    screeningQuestionsPassed: { type: 'BOOLEAN' },
-                    globalPitchPassed: { type: 'BOOLEAN' },
-                    behavioralPassed: { type: 'BOOLEAN' },
-                    certificationsPassed: { type: 'BOOLEAN' },
-                    joiningBonusPassed: { type: 'BOOLEAN' },
-                    websiteRedirectPassed: { type: 'BOOLEAN' }
-                  },
-                  required: [
-                    'greetingPassed', 'hrIntroPassed', 'eligibilityPassed', 'companyOverviewPassed',
-                    'screeningQuestionsPassed', 'globalPitchPassed', 'behavioralPassed',
-                    'certificationsPassed', 'joiningBonusPassed', 'websiteRedirectPassed'
-                  ]
-                },
-                feedback: { type: 'STRING' }
-              },
-              required: ['diarizedSegments', 'overallScore', 'complianceStatus', 'redFlags', 'callQuality', 'evaluation', 'feedback']
-            }
+          // Detect HTML page returned instead of audio (auth failure)
+          const isHtml = (hdr[0] === 0x3C); // '<' — starts with <html or <!DOCTYPE
+          if (isHtml) {
+            throw new Error('SlashRTC returned an HTML page instead of audio. Session may have expired — please ensure you are logged into the SlashRTC portal.');
           }
-        };
 
-        const geminiResult = await callGeminiApi(apiKey, payload);
+          let detectedExt = 'wav'; // safe default
+          let detectedMime = 'audio/wav';
 
-        currentCallTranscript = geminiResult.diarizedSegments || [];
-        isRealTranscribed = true;
-
-        finalResult = {
-          overallScore: geminiResult.overallScore,
-          complianceStatus: geminiResult.complianceStatus,
-          hasRedFlags: (geminiResult.redFlags || []).length > 0,
-          redFlagsCount: (geminiResult.redFlags || []).length,
-          redFlags: geminiResult.redFlags || [],
-          callQuality: geminiResult.callQuality,
-          evaluation: {
-            ...geminiResult.evaluation,
-            feedback: geminiResult.feedback || 'Gemini native audio evaluation completed.'
+          // WAV: RIFF....WAVE
+          if (hdr[0]===0x52 && hdr[1]===0x49 && hdr[2]===0x46 && hdr[3]===0x46) {
+            detectedExt = 'wav'; detectedMime = 'audio/wav';
           }
-        };
+          // MP3 with ID3v2 tag
+          else if (hdr[0]===0x49 && hdr[1]===0x44 && hdr[2]===0x33) {
+            detectedExt = 'mp3'; detectedMime = 'audio/mpeg';
+          }
+          // MP3 sync word (0xFF 0xEX)
+          else if (hdr[0]===0xFF && (hdr[1] & 0xE0)===0xE0) {
+            detectedExt = 'mp3'; detectedMime = 'audio/mpeg';
+          }
+          // OGG: OggS
+          else if (hdr[0]===0x4F && hdr[1]===0x67 && hdr[2]===0x67 && hdr[3]===0x53) {
+            detectedExt = 'ogg'; detectedMime = 'audio/ogg';
+          }
+          // FLAC: fLaC
+          else if (hdr[0]===0x66 && hdr[1]===0x4C && hdr[2]===0x61 && hdr[3]===0x43) {
+            detectedExt = 'flac'; detectedMime = 'audio/flac';
+          }
+          // MP4 / M4A: ftyp box at offset 4
+          else if (hdr[4]===0x66 && hdr[5]===0x74 && hdr[6]===0x79 && hdr[7]===0x70) {
+            detectedExt = 'mp4'; detectedMime = 'audio/mp4';
+          }
+          // WebM: EBML header
+          else if (hdr[0]===0x1A && hdr[1]===0x45 && hdr[2]===0xDF && hdr[3]===0xA3) {
+            detectedExt = 'webm'; detectedMime = 'audio/webm';
+          }
+
+          console.log(`SlashRTC audio — size: ${audioBlob.size} bytes, MIME: ${audioBlob.type}, detected: ${detectedExt}`);
+
+          // Recreate blob with correct MIME so FormData sets the right content-type
+          const audioFile = new File([audioBlob], `audio.${detectedExt}`, { type: detectedMime });
+
+          // Build multipart/form-data for OpenAI Whisper
+          const formData = new FormData();
+          formData.append('file', audioFile, `audio.${detectedExt}`);
+          formData.append('model', 'whisper-1');
+          formData.append('language', 'hi'); // Hindi / Hinglish
+          formData.append('response_format', 'verbose_json');
+          formData.append('timestamp_granularities[]', 'segment');
+
+          const whisperRes = await fetch('/api/openai-whisper-proxy', {
+            method: 'POST',
+            headers: { 'x-api-key': apiKey },
+            body: formData
+          });
+
+          if (!whisperRes.ok) {
+            const errText = await whisperRes.text();
+            let msg = `Whisper transcription failed (${whisperRes.status})`;
+            try { msg = JSON.parse(errText).error?.message || msg; } catch (_) {}
+            throw new Error(msg);
+          }
+
+          const whisperData = await whisperRes.json();
+          const rawTranscript = whisperData.text || '';
+          // Build simple diarized segments from Whisper timestamps
+          const segments = (whisperData.segments || []).map(s => ({
+            speaker: 'Agent',
+            time: new Date(s.start * 1000).toISOString().substr(14, 5),
+            text: s.text.trim()
+          }));
+          currentCallTranscript = segments.length > 0
+            ? segments
+            : [{ speaker: 'Agent', time: '00:00', text: rawTranscript }];
+          isRealTranscribed = true;
+
+          setAuditProgressStatus('Auditing Compliance (GPT-4o-mini)...');
+
+          const systemPrompt = `You are a Senior QA Compliance Auditor. Evaluate the call transcript and return a JSON object with exactly these keys:
+{
+  "overallScore": <integer 0-100>,
+  "complianceStatus": "Passed" | "Critical Fail",
+  "redFlags": [ { "code": string, "severity": string, "title": string, "snippet": string } ],
+  "callQuality": { "voiceClarity": string, "networkIssues": string, "backgroundNoise": string, "agentTone": string, "agentPacing": string, "candidateSentiment": string },
+  "evaluation": { "greetingPassed": bool, "hrIntroPassed": bool, "eligibilityPassed": bool, "companyOverviewPassed": bool, "screeningQuestionsPassed": bool, "globalPitchPassed": bool, "behavioralPassed": bool, "certificationsPassed": bool, "joiningBonusPassed": bool, "websiteRedirectPassed": bool },
+  "diarizedSegments": [ { "speaker": "Agent" | "Candidate", "time": "MM:SS", "text": string } ],
+  "feedback": string
+}`;
+
+          const userPrompt = `Transcript:\n${rawTranscript}\n\nScript Checkpoints to evaluate (true/false):
+CP1 greetingPassed: Introduced as RM from Naukri.com, confirmed candidate name, asked if good time, no Sir/Ma'am.
+CP2 hrIntroPassed: Job opportunity stated, call recorded disclosed, Naukri never asks for money, no job guarantee.
+CP3 eligibilityPassed: Asked if open to job switch, asked current/last job title.
+CP4 companyOverviewPassed: Pitched DPR Construction, mentioned offices (BKC/Dubai/Tokyo/Australia), www.dprusa.in.
+CP5 screeningQuestionsPassed: Addressed applied/not-applied cases (re-apply without cost / future assignments).
+CP6 globalPitchPassed: Asked verification Qs — experience, current org, roles, qualification, salary, joining.
+CP7 behavioralPassed: Mentioned domestic (Mumbai/Pune/Delhi) or international (Dubai/Tokyo/Paris) locations.
+CP8 certificationsPassed: Stated benefits (EPF/ESIC/insurance) and mandatory certs (PMP/AutoCAD/Primavera).
+CP9 joiningBonusPassed: Mentioned resume upload, 10% joining bonus within 30 days.
+CP10 websiteRedirectPassed: Directed candidate to visit www.dprusa.in.
+
+Red Flags:
+- RF_USED_SIR_MAAM (MEDIUM, -5pts): agent used Sir/Ma'am.
+- RF_FAKE_CERT_SELLING (CRITICAL, -50pts): agent suggested buying certs without study.
+- RF_UNAUTHORIZED_FEE (CRITICAL, -100pts): agent asked for money/deposit.
+- RF_MISSING_WEBSITE_REDIRECT (HIGH, -15pts): failed to mention www.dprusa.in.
+
+For callQuality, infer from transcript content. For diarizedSegments, try to split Agent vs Candidate turns. Return ONLY valid JSON.`;
+
+          const aiResult = await callOpenAiApi(apiKey, [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]);
+
+          // Override transcript with diarized version if AI provided it
+          if (aiResult.diarizedSegments && aiResult.diarizedSegments.length > 0) {
+            currentCallTranscript = aiResult.diarizedSegments;
+          }
+
+          finalResult = {
+            overallScore: aiResult.overallScore,
+            complianceStatus: aiResult.complianceStatus,
+            hasRedFlags: (aiResult.redFlags || []).length > 0,
+            redFlagsCount: (aiResult.redFlags || []).length,
+            redFlags: aiResult.redFlags || [],
+            callQuality: aiResult.callQuality,
+            evaluation: {
+              ...aiResult.evaluation,
+              feedback: aiResult.feedback || 'OpenAI Whisper + GPT-4o-mini audio evaluation completed.'
+            }
+          };
+        } // end else (audio blob valid)
       }
 
-      if (isRealTranscribed && !finalResult) {
-        setAuditProgressStatus('Evaluating Transcript (Gemini)...');
-        const transcriptText = currentCallTranscript ? currentCallTranscript.map(t => `${t.speaker}: ${t.text}`).join('\n') : '';
+      // STEP 2: If transcript already exists (no audio), evaluate with GPT-4o-mini only
+      if (!finalResult) {
+        setAuditProgressStatus('Auditing Compliance (GPT-4o-mini)...');
+        const transcriptText = currentCallTranscript
+          ? currentCallTranscript.map(t => `${t.speaker}: ${t.text}`).join('\n')
+          : '';
 
-        const promptText = `You are a Senior QA Compliance Auditor evaluating a candidate screening call transcript.
-Perform two tasks:
-1. Perform a compliance script audit against the 10 checkpoints and compliance red flags.
-2. Audit the call's technical voice quality and soft skills based on conversation indicators.
+        const systemPrompt = `You are a Senior QA Compliance Auditor. Evaluate the call transcript and return a JSON object with exactly these keys:
+{
+  "overallScore": <integer 0-100>,
+  "complianceStatus": "Passed" | "Critical Fail",
+  "redFlags": [ { "code": string, "severity": string, "title": string, "snippet": string } ],
+  "callQuality": { "voiceClarity": string, "networkIssues": string, "backgroundNoise": string, "agentTone": string, "agentPacing": string, "candidateSentiment": string },
+  "evaluation": { "greetingPassed": bool, "hrIntroPassed": bool, "eligibilityPassed": bool, "companyOverviewPassed": bool, "screeningQuestionsPassed": bool, "globalPitchPassed": bool, "behavioralPassed": bool, "certificationsPassed": bool, "joiningBonusPassed": bool, "websiteRedirectPassed": bool },
+  "feedback": string
+}`;
 
-Here is the transcript of the call to evaluate:
-${transcriptText}
+        const userPrompt = `Transcript:\n${transcriptText}\n\nScript Checkpoints to evaluate (true/false):
+CP1 greetingPassed: Introduced as RM from Naukri.com, confirmed candidate name, asked if good time, no Sir/Ma'am.
+CP2 hrIntroPassed: Job opportunity stated, call recorded disclosed, Naukri never asks for money, no job guarantee.
+CP3 eligibilityPassed: Asked if open to job switch, asked current/last job title.
+CP4 companyOverviewPassed: Pitched DPR Construction, mentioned offices (BKC/Dubai/Tokyo/Australia), www.dprusa.in.
+CP5 screeningQuestionsPassed: Addressed applied/not-applied cases (re-apply without cost / future assignments).
+CP6 globalPitchPassed: Asked verification Qs — experience, current org, roles, qualification, salary, joining.
+CP7 behavioralPassed: Mentioned domestic (Mumbai/Pune/Delhi) or international (Dubai/Tokyo/Paris) locations.
+CP8 certificationsPassed: Stated benefits (EPF/ESIC/insurance) and mandatory certs (PMP/AutoCAD/Primavera).
+CP9 joiningBonusPassed: Mentioned resume upload, 10% joining bonus within 30 days.
+CP10 websiteRedirectPassed: Directed candidate to visit www.dprusa.in.
 
-SCRIPT CHECKPOINTS (Evaluate as true/false):
-- CP1 (greetingPassed): Introduce themselves as a Relationship Manager from Naukri.com, verify the candidate's name, and ask if it's a good time to connect. Maintain a neutral tone & AVOID 'Sir/Ma'am'.
-- CP2 (hrIntroPassed): State the job opportunity with premium hiring partners, mention the call is recorded, state that Naukri never asks for money, and state that we do not guarantee job offers.
-- CP3 (eligibilityPassed): Confirm if the candidate is open to a job switch or new job, and ask for their current/last job title.
-- CP4 (companyOverviewPassed): Pitch DPR Construction as a multinational engineering company delivering roads, metro, railway, power, mining, manufacturing, and high-rise infrastructure, with offices in Mumbai BKC, Paris, Dubai, Tokyo, Australia, Mexico, and official website www.dprusa.in.
-- CP5 (screeningQuestionsPassed): Address candidate's applied cases (Case 1: re-apply under fresh cycles without cost, Case 2: considered for future assignments).
-- CP6 (globalPitchPassed): Ask verification questions: total years of experience, current employment, last organization, key roles, department, education, graduation year, certifications, current salary, expected salary, interviewed in 6 months, age, and joining timeline.
-- CP7 (behavioralPassed): Mention domestic locations (Mumbai, Pune, Chennai, Delhi NCR) or international sites (Tokyo, Dubai, Paris).
-- CP8 (certificationsPassed): State corporate benefits (EPF, ESIC, family medical insurance, gratuity, performance bonus, travel allowance, site accommodation) and explain certifications like PMP, AutoCAD, Primavera P6, or Revit are mandatory.
-- CP9 (joiningBonusPassed): Mention registration link, resume upload, and 10% sign-on joining bonus if joining within 30 days.
-- CP10 (websiteRedirectPassed): Direct the candidate to visit www.dprusa.in for branch address and project details.
+Red Flags:
+- RF_USED_SIR_MAAM (MEDIUM, -5pts): agent used Sir/Ma'am.
+- RF_FAKE_CERT_SELLING (CRITICAL, -50pts): agent suggested buying certs without study.
+- RF_UNAUTHORIZED_FEE (CRITICAL, -100pts): agent asked for money/deposit.
+- RF_MISSING_WEBSITE_REDIRECT (HIGH, -15pts): failed to mention www.dprusa.in.
 
-COMPLIANCE RED FLAGS (Deduct points if found):
-1. Used formal titles like "Sir" or "Ma'am" (RF_USED_SIR_MAAM, Severity: MEDIUM). Deduct 5 points.
-2. Paid Fake Certification Selling Violation: Agent tells candidate they can get/buy a certificate without study/exams (RF_FAKE_CERT_SELLING, Severity: CRITICAL). Deduct 50 points.
-3. Demand of Upfront Fee or Processing Charges: Asking candidate to pay money or deposit for certification or job registration, instead of emphasizing that Naukri never asks for money (RF_UNAUTHORIZED_FEE, Severity: CRITICAL). Deduct 100 points.
-4. Missing Mandatory Website Navigation: Failure to direct the candidate to navigate to www.dprusa.in (RF_MISSING_WEBSITE_REDIRECT, Severity: HIGH). Deduct 15 points.
+For callQuality, infer from the text. Return ONLY valid JSON.`;
 
-TECHNICAL & QUALITY EVALUATIONS:
-- Voice Clarity: Is the audio volume good and voice clear? Value: "Good" or "Muffled / Low Volume".
-- Connectivity / Network Issues: Any voice breakups, network latency delays, or long silences? Value: "None" or "Voice Breakups / Latency".
-- Ambient Background Noise: Any traffic, keyboard clicks, static, or background talk? Value: "None" or "High Static / Center Noise".
-- Agent Tone & Attitude: Professional, polite and empathetic, or impatient/robotic? Value: "Professional & Polite" or "Impatient / Robotic".
-- Agent Speaking Pacing: Is speaking speed normal, too fast, or too slow? Value: "Normal", "Too Fast", "Too Slow".
-- Candidate Sentiment: How does the candidate sound? Value: "Interested", "Neutral", "Frustrated / Refused".
-
-Please return the complete compliance audit results matching the response schema.`;
-
-        const payload = {
-          contents: [
-            {
-              parts: [
-                {
-                  text: promptText
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: 'OBJECT',
-              properties: {
-                overallScore: { type: 'INTEGER' },
-                complianceStatus: { type: 'STRING', enum: ['Passed', 'Critical Fail'] },
-                redFlags: {
-                  type: 'ARRAY',
-                  items: {
-                    type: 'OBJECT',
-                    properties: {
-                      code: { type: 'STRING' },
-                      severity: { type: 'STRING' },
-                      title: { type: 'STRING' },
-                      snippet: { type: 'STRING' }
-                    },
-                    required: ['code', 'severity', 'title', 'snippet']
-                  }
-                },
-                callQuality: {
-                  type: 'OBJECT',
-                  properties: {
-                    voiceClarity: { type: 'STRING' },
-                    networkIssues: { type: 'STRING' },
-                    backgroundNoise: { type: 'STRING' },
-                    agentTone: { type: 'STRING' },
-                    agentPacing: { type: 'STRING' },
-                    candidateSentiment: { type: 'STRING' }
-                  },
-                  required: ['voiceClarity', 'networkIssues', 'backgroundNoise', 'agentTone', 'agentPacing', 'candidateSentiment']
-                },
-                evaluation: {
-                  type: 'OBJECT',
-                  properties: {
-                    greetingPassed: { type: 'BOOLEAN' },
-                    hrIntroPassed: { type: 'BOOLEAN' },
-                    eligibilityPassed: { type: 'BOOLEAN' },
-                    companyOverviewPassed: { type: 'BOOLEAN' },
-                    screeningQuestionsPassed: { type: 'BOOLEAN' },
-                    globalPitchPassed: { type: 'BOOLEAN' },
-                    behavioralPassed: { type: 'BOOLEAN' },
-                    certificationsPassed: { type: 'BOOLEAN' },
-                    joiningBonusPassed: { type: 'BOOLEAN' },
-                    websiteRedirectPassed: { type: 'BOOLEAN' }
-                  },
-                  required: [
-                    'greetingPassed', 'hrIntroPassed', 'eligibilityPassed', 'companyOverviewPassed',
-                    'screeningQuestionsPassed', 'globalPitchPassed', 'behavioralPassed',
-                    'certificationsPassed', 'joiningBonusPassed', 'websiteRedirectPassed'
-                  ]
-                },
-                feedback: { type: 'STRING' }
-              },
-              required: ['overallScore', 'complianceStatus', 'redFlags', 'callQuality', 'evaluation', 'feedback']
-            }
-          }
-        };
-
-        const geminiResult = await callGeminiApi(apiKey, payload);
+        const aiResult = await callOpenAiApi(apiKey, [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]);
 
         finalResult = {
-          overallScore: geminiResult.overallScore,
-          complianceStatus: geminiResult.complianceStatus,
-          hasRedFlags: (geminiResult.redFlags || []).length > 0,
-          redFlagsCount: (geminiResult.redFlags || []).length,
-          redFlags: geminiResult.redFlags || [],
-          callQuality: geminiResult.callQuality,
+          overallScore: aiResult.overallScore,
+          complianceStatus: aiResult.complianceStatus,
+          hasRedFlags: (aiResult.redFlags || []).length > 0,
+          redFlagsCount: (aiResult.redFlags || []).length,
+          redFlags: aiResult.redFlags || [],
+          callQuality: aiResult.callQuality,
           evaluation: {
-            ...geminiResult.evaluation,
-            feedback: geminiResult.feedback || 'Gemini transcript compliance evaluation completed.'
+            ...aiResult.evaluation,
+            feedback: aiResult.feedback || 'GPT-4o-mini transcript compliance evaluation completed.'
           }
         };
       }
 
       if (!finalResult) {
-        throw new Error("Compliance evaluation could not be completed.");
+        throw new Error('Compliance evaluation could not be completed.');
       }
 
       const updatedCall = {
@@ -715,7 +639,8 @@ Please return the complete compliance audit results matching the response schema
     });
     setIsAuditingBatch(true);
 
-    const concurrencyLimit = 3;
+    const isApiKeyOpenAi = (apiKey || '').startsWith('sk-');
+    const concurrencyLimit = isApiKeyOpenAi ? 5 : 3;
     let currentIndex = 0;
     
     const worker = async () => {
@@ -723,9 +648,9 @@ Please return the complete compliance audit results matching the response schema
         const index = currentIndex++;
         const callRecord = queue[index];
         
-        // Add a 4-second stagger delay between starting calls to stay safely under Gemini 20 RPM Free Tier limit
-        if (index > 0) {
-          await new Promise(resolve => setTimeout(resolve, 4000));
+        // Add a stagger delay only for Gemini free tier rate limit
+        if (index > 0 && !isApiKeyOpenAi) {
+          await new Promise(resolve => setTimeout(resolve, 2500));
         }
         
         try {
@@ -796,23 +721,23 @@ Please return the complete compliance audit results matching the response schema
       <aside className="sidebar select-none">
         
         {/* Sidebar Brand Identity */}
-        <div className="h-16 border-b border-slate-800 px-5 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-            <ShieldCheck className="w-5.5 h-5.5" />
+        <div className="h-[68px] border-b border-[var(--border-color)] px-6 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-sm">
+            <ShieldCheck className="w-4.5 h-4.5" />
           </div>
           <div>
-            <span className="font-extrabold text-sm tracking-tight text-white block">CallPulse <strong className="text-blue-500">AI</strong></span>
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Compliance QA</span>
+            <span className="font-bold text-[15px] tracking-tight text-[var(--text-primary)] block leading-tight">CallPulse <span className="text-indigo-600">AI</span></span>
+            <span className="text-[11px] text-[var(--text-muted)] font-medium block">Compliance QA</span>
           </div>
         </div>
 
         {/* Sidebar Links */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-4 py-5 space-y-1">
           <button 
             onClick={() => { setActiveView('dashboard'); }}
             className={`w-full sidebar-link ${activeView === 'dashboard' ? 'active' : ''}`}
           >
-            <LayoutDashboard className="w-4 h-4 shrink-0" />
+            <LayoutDashboard className="w-[17px] h-[17px] shrink-0" />
             <span>Dashboard Overview</span>
           </button>
 
@@ -820,7 +745,7 @@ Please return the complete compliance audit results matching the response schema
             onClick={() => { setActiveView('audits'); }}
             className={`w-full sidebar-link ${activeView === 'audits' ? 'active' : ''}`}
           >
-            <ListTodo className="w-4 h-4 shrink-0" />
+            <ListTodo className="w-[17px] h-[17px] shrink-0" />
             <span>Call Audits Log</span>
           </button>
 
@@ -828,7 +753,7 @@ Please return the complete compliance audit results matching the response schema
             onClick={() => { setActiveView('agents'); }}
             className={`w-full sidebar-link ${activeView === 'agents' ? 'active' : ''}`}
           >
-            <Users className="w-4 h-4 shrink-0" />
+            <Users className="w-[17px] h-[17px] shrink-0" />
             <span>Agent Performance</span>
           </button>
 
@@ -836,7 +761,7 @@ Please return the complete compliance audit results matching the response schema
             onClick={() => { setActiveView('script'); }}
             className={`w-full sidebar-link ${activeView === 'script' ? 'active' : ''}`}
           >
-            <FileText className="w-4 h-4 shrink-0" />
+            <FileText className="w-[17px] h-[17px] shrink-0" />
             <span>Script Guidelines</span>
           </button>
 
@@ -844,19 +769,19 @@ Please return the complete compliance audit results matching the response schema
             onClick={() => { setActiveView('settings'); }}
             className={`w-full sidebar-link ${activeView === 'settings' ? 'active' : ''}`}
           >
-            <Settings className="w-4 h-4 shrink-0" />
+            <Settings className="w-[17px] h-[17px] shrink-0" />
             <span>System Settings</span>
           </button>
         </nav>
 
-        {/* Sidebar Footer User Summary */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/20 text-xs font-semibold space-y-3">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${slashRtcActive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-            <span className="text-slate-400 font-mono text-[10px]">SlashRTC Status:</span>
-            <strong className="text-slate-200 font-bold">{slashRtcActive ? 'Connected' : 'Offline'}</strong>
+        {/* Sidebar Footer */}
+        <div className="px-4 py-4 border-t border-[var(--border-color)]">
+          <div className="flex items-center gap-2 text-[13px]">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${slashRtcActive ? 'bg-emerald-500' : 'bg-amber-400'}`}></span>
+            <span className="text-[var(--text-muted)] font-medium">Dialer Sync:</span>
+            <strong className="text-[var(--text-primary)] font-semibold">{slashRtcActive ? 'Connected' : 'Offline'}</strong>
           </div>
-          <div className="text-[10px] text-slate-500 font-mono leading-none">
+          <div className="text-[12px] text-[var(--text-muted)] mt-1.5">
             User: SupportEngineer
           </div>
         </div>
@@ -879,62 +804,60 @@ Please return the complete compliance audit results matching the response schema
           
           {isDbLoading ? (
             <div className="flex flex-col items-center justify-center py-24 space-y-4">
-              <div className="w-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin aspect-square"></div>
-              <p className="text-xs text-[var(--text-secondary)] font-semibold tracking-wide animate-pulse">Synchronizing with Supabase...</p>
+              <div className="w-8 h-8 border-2 border-gray-200 border-t-indigo-500 rounded-full animate-spin"></div>
+              <p className="text-sm text-[var(--text-muted)] font-medium">Synchronizing with Supabase...</p>
             </div>
           ) : (
             <>
               {batchProgress && (
-                <div className="max-w-7xl mx-auto mb-6 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-2xl p-5 shadow-lg relative overflow-hidden animate-in slide-in-from-top duration-300">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+                <div className="mb-6 bg-white border border-[var(--border-color)] rounded-xl p-5 shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-indigo-500 rounded-t-xl"></div>
 
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1.5 text-left">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center justify-center w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
-                        <span className="font-extrabold text-sm text-[var(--text-primary)]">
-                          {batchProgress.active ? 'Active Batch Audit Processing' : 'Batch Audit Process Stopped'}
+                    <div className="space-y-1 text-left">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                        <span className="font-semibold text-[var(--text-primary)] text-sm">
+                          {batchProgress.active ? 'AI Batch Audit Running' : 'Batch Audit Stopped'}
                         </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-500">
-                          Concurrency: {batchProgress.active ? '3 Workers' : 'None'}
+                        <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600">
+                          {batchProgress.active ? '3 Workers Active' : 'Inactive'}
                         </span>
                       </div>
-                      <p className="text-xs text-[var(--text-secondary)] font-medium">
-                        Evaluated <strong className="text-[var(--text-primary)]">{batchProgress.processed}</strong> of <strong className="text-[var(--text-primary)]">{batchProgress.total}</strong> calls 
+                      <p className="text-[13px] text-[var(--text-muted)]">
+                        Evaluated <strong className="text-[var(--text-primary)] font-semibold">{batchProgress.processed}</strong> of <strong className="text-[var(--text-primary)] font-semibold">{batchProgress.total}</strong> calls
                         {batchProgress.active && batchProgress.processed > 0 && (
-                          <span> (Est. Time Remaining: {Math.round(((Date.now() - batchProgress.startTime) / batchProgress.processed) * (batchProgress.total - batchProgress.processed) / 1000)} seconds)</span>
+                          <span className="text-[var(--text-muted)]"> — ~{Math.round(((Date.now() - batchProgress.startTime) / batchProgress.processed) * (batchProgress.total - batchProgress.processed) / 1000)}s remaining</span>
                         )}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-3 text-xs font-bold font-mono">
-                        <div className="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 rounded-lg flex items-center gap-1.5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 text-[13px] font-medium">
+                        <div className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           <span>Passed: {batchProgress.success}</span>
                         </div>
-                        <div className="px-3 py-1.5 bg-rose-500/10 text-rose-600 rounded-lg flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                        <div className="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
                           <span>Errors: {batchProgress.failed}</span>
                         </div>
                       </div>
 
                       {batchProgress.active && (
                         <button
-                          onClick={() => {
-                            cancelBatchRef.current = true;
-                          }}
-                          className="btn-secondary py-1.5 px-4 text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-500/5 cursor-pointer"
+                          onClick={() => { cancelBatchRef.current = true; }}
+                          className="btn-secondary py-1.5 px-4 text-sm text-red-600 hover:bg-red-50 border-red-200"
                         >
-                          Cancel / Pause Queue
+                          Pause
                         </button>
                       )}
                     </div>
                   </div>
 
-                  <div className="w-full bg-[var(--border-color)] h-2 rounded-full mt-4 overflow-hidden">
+                  <div className="w-full bg-gray-100 h-1.5 rounded-full mt-4 overflow-hidden">
                     <div 
-                      className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-300"
+                      className="bg-indigo-500 h-full rounded-full transition-all duration-300"
                       style={{ width: `${(batchProgress.processed / batchProgress.total) * 100}%` }}
                     ></div>
                   </div>
@@ -977,46 +900,44 @@ Please return the complete compliance audit results matching the response schema
           )}
 
           {activeView === 'settings' && (
-            <div className="space-y-6 max-w-4xl">
+            <div className="space-y-6 max-w-4xl animate-in fade-in duration-200">
               
-
-
               {/* SlashRTC proxy logins */}
-              <div className="card-white p-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold shrink-0">
+              <div className="card-white p-8 space-y-6 max-w-2xl">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
                     <Lock className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-[var(--text-primary)] text-sm">SlashRTC Integrations Proxy</h3>
-                    <p className="text-[11px] text-[var(--text-secondary)] font-medium">Verify credentials for AramcoIndia SlashRTC dialer portals</p>
+                    <h3 className="font-semibold text-[var(--text-primary)] text-base">SlashRTC Integrations Proxy</h3>
+                    <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Configure credentials for AramcoIndia SlashRTC dialer portals</p>
                   </div>
                 </div>
 
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-xs text-[var(--text-secondary)] font-medium">
-                  <p className="flex items-center gap-1.5 font-bold text-amber-600 mb-1">
-                    <ShieldAlert className="w-4 h-4 shrink-0" />
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-[13px] text-amber-800 leading-relaxed">
+                  <p className="flex items-center gap-2 font-semibold text-amber-700 mb-1.5">
+                    <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600" />
                     <span>Browser Playback Protocol</span>
                   </p>
-                  <span className="leading-relaxed">
-                    Recording playback links require your current browser session to be authenticated at <strong className="text-[var(--text-primary)] font-bold">aramcoindia.slashrtc.in</strong>.
+                  <span>
+                    Recording playback links require your current browser session to be authenticated at <strong className="font-semibold">aramcoindia.slashrtc.in</strong>.
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-[var(--text-secondary)]">SlashRTC Base Portal Link</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className="block text-[13px] font-medium text-[var(--text-secondary)]">SlashRTC Base Portal URL</label>
                     <input 
                       type="text" 
                       value={portalUrl} 
                       onChange={(e) => setPortalUrl(e.target.value)}
-                      className="input-field font-mono text-[11px]"
+                      className="input-field font-mono text-[13px]"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-[var(--text-secondary)]">Username</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-[13px] font-medium text-[var(--text-secondary)]">Username</label>
                       <input 
                         type="text" 
                         value={username} 
@@ -1024,42 +945,42 @@ Please return the complete compliance audit results matching the response schema
                         className="input-field"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-[var(--text-secondary)]">Password</label>
+                    <div className="space-y-2">
+                      <label className="block text-[13px] font-medium text-[var(--text-secondary)]">Password</label>
                       <input 
                         type="password" 
                         value={password} 
                         onChange={(e) => setPassword(e.target.value)}
-                        className="input-field font-mono"
+                        className="input-field"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-2 flex items-center justify-between border-t border-[var(--border-color)]">
+                <div className="pt-5 flex items-center justify-between border-t border-[var(--border-color)]">
                   <a 
                     href={portalUrl} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-xs text-blue-500 hover:text-blue-600 font-bold flex items-center gap-1"
+                    className="text-[13px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1.5"
                   >
-                    <span>Open SlashRTC Portal Link</span>
+                    <span>Open SlashRTC Portal</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <button 
                       onClick={() => setSlashRtcActive(prev => !prev)}
-                      className={`btn-secondary py-1.5 text-xs font-bold ${slashRtcActive ? 'text-rose-500' : 'text-emerald-600'}`}
+                      className={`btn-secondary py-2 px-4 text-sm font-medium ${slashRtcActive ? 'text-red-600 hover:bg-red-50 border-red-200' : 'text-emerald-600 hover:bg-emerald-50 border-emerald-200'}`}
                     >
-                      {slashRtcActive ? 'Disconnect Auth' : 'Activate Auth'}
+                      {slashRtcActive ? 'Disconnect' : 'Activate Auth'}
                     </button>
                     <button 
                       onClick={() => {
                         confetti({ particleCount: 20, spread: 40 });
                         setSlashRtcActive(true);
                       }}
-                      className="btn-primary py-1.5 text-xs font-bold"
+                      className="btn-primary py-2 px-5 text-sm font-semibold"
                     >
                       Save Configuration
                     </button>
@@ -1074,6 +995,7 @@ Please return the complete compliance audit results matching the response schema
         )}
       </main>
 
+
       </div>
 
       {/* Modal Dialogs */}
@@ -1087,44 +1009,44 @@ Please return the complete compliance audit results matching the response schema
 
       {importSuccessData && (
         <div className="modal-backdrop select-none">
-          <div className="bg-[var(--bg-card-solid)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl max-w-md w-full p-6 relative modal-content text-left animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-xl max-w-md w-full p-7 relative modal-content text-left">
             <button
               onClick={handleCloseImportSuccess}
-              className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--bg-card-subtle)] transition-colors"
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
-                <Sparkles className="w-5 h-5 animate-pulse" />
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
+                <Sparkles className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-extrabold text-[var(--text-primary)] text-lg">Import Complete</h3>
-                <p className="text-xs text-[var(--text-secondary)] font-medium">Successfully processed {importSuccessData.count} call records</p>
+                <h3 className="font-bold text-[var(--text-primary)] text-lg">Import Complete</h3>
+                <p className="text-[13px] text-[var(--text-muted)]">Successfully processed {importSuccessData.count} call records</p>
               </div>
             </div>
 
-            <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 text-xs text-[var(--text-secondary)] font-medium mb-6 leading-relaxed">
-              <p className="font-bold text-blue-500 flex items-center gap-1.5 mb-1">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-[13px] text-indigo-700 font-medium mb-6 leading-relaxed">
+              <p className="font-semibold flex items-center gap-1.5 mb-1 text-indigo-600">
                 <Database className="w-4 h-4" /> Ready for AI compliance auditing
               </p>
-              Your dataset has been ingested into the system database. You can start the automated AI compliance evaluation immediately, or browse the imported records.
+              Your dataset has been ingested. Start AI evaluation immediately or browse the imported records first.
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-4">
+            <div className="flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-5">
               <button
                 onClick={handleCloseImportSuccess}
-                className="btn-secondary py-2 px-4 text-xs font-bold"
+                className="btn-secondary py-2.5 px-5 text-sm font-medium"
               >
-                Just View Records
+                View Records
               </button>
               <button
                 onClick={handleStartImportAudit}
-                className="btn-primary py-2 px-4 text-xs font-bold shadow-md shadow-blue-500/10 flex items-center gap-1.5"
+                className="btn-primary py-2.5 px-5 text-sm font-semibold flex items-center gap-2"
               >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>Start AI Audit Immediately</span>
+                <Sparkles className="w-4 h-4" />
+                <span>Start AI Audit</span>
               </button>
             </div>
           </div>

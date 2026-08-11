@@ -100,10 +100,6 @@ const CUTOFFS = {
   PL10: 420
 };
 
-const speakText = (text, speaker) => {
-  // Speech synthesis is completely disabled to remove robotic voice noise overlay
-};
-
 export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtcActive, onOpenSlashRTC, username, password, portalUrl, auditProgressStatus }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -116,7 +112,6 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
   const [duration, setDuration] = useState(0);
   const [audioError, setAudioError] = useState(false);
   const [hasAttemptedPlay, setHasAttemptedPlay] = useState(false);
-
 
   const [showFinalReport, setShowFinalReport] = useState(true);
   
@@ -157,7 +152,6 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
     setShowFinalReport(true);
     lastSpokenIndexRef.current = -1;
-    window.speechSynthesis?.cancel();
     if (audioRef.current) {
       audioRef.current.load();
     }
@@ -215,8 +209,6 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
     }
   }, [activeLineIdx, isPlaying, activeTab]);
 
-  // Robotic speech synthesis is disabled. Only the actual audio recording plays.
-
   const handleTimeUpdate = () => {
     if (audioRef.current) {
       setCurrentTime(audioRef.current.currentTime);
@@ -258,7 +250,6 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   const renderWordByWordText = (line, lineSec, nextLineSec) => {
-    // Split by words and whitespace so spaces are preserved in rendering
     const words = line.text.split(/(\s+)/);
     
     // Filter out pure whitespace for timing calculation
@@ -302,7 +293,7 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
       const thisIdx = wordIdx;
       wordIdx++;
 
-      // In Live STT mode (when showFinalReport is false), hide words that haven't been reached yet
+      // In Live STT mode, hide words that haven't been reached yet
       if (!showFinalReport) {
         if (!isSpoken) {
           return null;
@@ -317,22 +308,17 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
       if (isSpoken) {
         if (isLineActive) {
           if (thisIdx < currentWordIdx) {
-            // Already spoken in the active line
-            highlightClass += "text-indigo-600 font-extrabold bg-indigo-50/70";
+            highlightClass += "text-indigo-350 font-extrabold bg-indigo-500/10";
           } else if (thisIdx === currentWordIdx) {
-            // Currently active word
-            highlightClass += "text-indigo-900 font-black bg-indigo-200/90 scale-105 shadow-3xs ring-2 ring-indigo-500/20";
+            highlightClass += "text-white font-black bg-indigo-500/30 scale-105 shadow-3xs ring-1 ring-indigo-400/40";
           } else {
-            // Not yet spoken in the active line
             highlightClass += "text-[var(--text-primary)] font-medium opacity-80";
           }
         } else {
-          // Entire bubble is in the past
           highlightClass += "text-[var(--text-primary)] font-medium";
         }
       } else {
-        // Future bubble
-        highlightClass += "text-[var(--text-muted)] opacity-60";
+        highlightClass += "text-[var(--text-muted)] opacity-50";
       }
 
       return (
@@ -340,7 +326,7 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
           key={index}
           className={highlightClass}
           onClick={(e) => {
-            e.stopPropagation(); // Avoid triggering the parent div's onClick
+            e.stopPropagation();
             if (audioRef.current) {
               const targetTime = lineSec + (thisIdx / totalWords) * lineDuration;
               audioRef.current.currentTime = targetTime;
@@ -363,7 +349,7 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
   return (
     <div className="modal-backdrop">
-      <div className="bg-[var(--bg-card-solid)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl max-w-7xl w-full h-[90vh] flex flex-col relative overflow-hidden modal-content">
+      <div className="bg-white text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl max-w-7xl w-full h-[90vh] flex flex-col relative overflow-hidden modal-content">
         
         {/* Hidden HTML5 Audio Element */}
         <audio
@@ -376,37 +362,37 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
         />
 
         {/* Header Bar */}
-        <div className="p-4 px-6 bg-[var(--bg-card-solid)] border-b border-[var(--border-color)] flex items-center justify-between shrink-0 transition-colors">
+        <div className="px-7 py-4 bg-white border-b border-[var(--border-color)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-600 flex items-center justify-center text-white font-extrabold text-sm shadow-md shadow-indigo-500/20">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-[11px] shadow-sm">
               AI
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-bold text-base text-[var(--text-primary)]">Call Audit Inspector</h2>
-                <span className="text-[10px] bg-[var(--bg-card-subtle)] text-[var(--text-secondary)] font-mono px-2 py-0.5 rounded border border-[var(--border-color)]">
+              <div className="flex items-center gap-2.5">
+                <h2 className="font-bold text-base text-[var(--text-primary)] leading-none">Call Audit Inspector</h2>
+                <span className="text-[11px] bg-gray-100 text-gray-500 font-mono px-2 py-0.5 rounded border border-gray-200 leading-none">
                   {call.id}
                 </span>
               </div>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Agent: <strong className="text-[var(--text-primary)] font-bold">{call.agentName}</strong> | Candidate: <strong className="text-[var(--text-primary)] font-bold">{call.candidateName}</strong> ({call.callDate})
+              <p className="text-[13px] text-[var(--text-muted)] mt-1.5 font-normal">
+                Agent: <strong className="text-[var(--text-secondary)] font-medium">{call.agentName}</strong> | Candidate: <strong className="text-[var(--text-secondary)] font-medium">{call.candidateName}</strong> ({call.callDate})
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={handleReAuditClick}
               disabled={isAuditing}
-              className="btn-primary py-1.5 px-3.5 text-xs font-bold shadow-sm"
+              className="btn-primary py-2 px-4 text-sm font-semibold"
             >
-              <Sparkles className={`w-3.5 h-3.5 ${isAuditing ? 'animate-spin' : 'text-amber-300 fill-amber-300'}`} />
+              <Sparkles className={`w-4 h-4 ${isAuditing ? 'animate-spin' : ''}`} />
               <span>{isAuditing ? (auditProgressStatus || 'Re-Auditing...') : 'Run AI Audit'}</span>
             </button>
 
             <button
               onClick={onClose}
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--bg-card-subtle)] transition-colors"
+              className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -414,7 +400,7 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
         </div>
 
         {/* Audio Player Strip (Integrated SlashRTC Dynamic Link Player) */}
-        <div className="bg-[var(--bg-card-subtle)] p-4 border-b border-[var(--border-color)] flex flex-col items-stretch gap-3 shrink-0 transition-colors">
+        <div className="bg-gray-50 px-6 py-4 border-b border-[var(--border-color)] flex flex-col items-stretch gap-3 shrink-0">
           
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             
@@ -422,25 +408,25 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
             <div className="flex items-center gap-4 w-full md:w-auto flex-1">
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-600 hover:scale-105 text-white flex items-center justify-center shadow-lg transition-all active:scale-95 shrink-0"
+                className="w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
                 title={isPlaying ? "Pause audio" : "Play audio"}
               >
-                {isPlaying ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white ml-0.5" />}
+                {isPlaying ? <Pause className="w-4.5 h-4.5 fill-white" /> : <Play className="w-4.5 h-4.5 fill-white ml-0.5" />}
               </button>
 
               {/* Audio Waveform simulation */}
-              <div className="flex items-center gap-1.5 h-8 px-2 shrink-0">
-                {[12, 28, 20, 36, 16, 24, 8, 30, 18, 26, 10, 32].map((height, idx) => (
+              <div className="flex items-center gap-1.5 h-6 px-1 shrink-0">
+                {[10, 24, 16, 30, 12, 20, 6, 26, 14, 22, 8, 28].map((height, idx) => (
                   <div
                     key={idx}
-                    className="w-1 rounded-full bg-indigo-500 transition-all duration-300"
+                    className="w-1 rounded-full bg-indigo-400 transition-all duration-300"
                     style={{
                       height: isPlaying ? '100%' : '20%',
                       animation: isPlaying
                         ? `wave-bar 1s ease-in-out infinite ${idx * 0.1}s`
                         : 'none',
-                      minHeight: '4px',
-                      maxHeight: `${height}px`
+                      minHeight: '3px',
+                      maxHeight: `${height - 4}px`
                     }}
                   />
                 ))}
@@ -448,36 +434,34 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
               {/* Seekable Progress Bar */}
               <div className="flex-1 md:max-w-md">
-                <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)] font-semibold font-mono mb-1 select-none">
+                <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono mb-1.5 select-none">
                   <span>{formatTime(currentTime)}</span>
-                  <span className="flex items-center gap-1.5">
-                    <span>{duration > 0 ? formatTime(duration) : (call.talkTime || call.duration)}</span>
-                  </span>
+                  <span>{duration > 0 ? formatTime(duration) : (call.talkTime || call.duration)}</span>
                 </div>
                 <div 
                   onClick={handleSeek}
-                  className="w-full bg-slate-200 hover:bg-slate-300 h-2 rounded-full relative cursor-pointer transition-colors"
+                  className="w-full bg-gray-200 hover:bg-gray-300 h-2 rounded-full relative cursor-pointer transition-colors"
                   title="Seek playback location"
                 >
                   <div 
-                    className="bg-gradient-to-r from-indigo-500 to-blue-500 h-full rounded-full transition-all duration-75 relative"
+                    className="bg-indigo-500 h-full rounded-full transition-all duration-75 relative"
                     style={{ width: `${progressPercent}%` }}
                   >
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-indigo-600 shadow-md hover:scale-110 transition-transform"></div>
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-indigo-500 shadow-md hover:scale-110 transition-transform"></div>
                   </div>
                 </div>
               </div>
 
               {/* Playback speed multiplier */}
-              <div className="flex items-center gap-1 bg-[var(--bg-card-solid)] p-1 rounded-lg border border-[var(--border-color)] text-[11px] font-mono text-[var(--text-secondary)] shrink-0 select-none">
+              <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-[var(--border-color)] text-[11px] font-mono text-gray-500 shrink-0 select-none">
                 {[1, 1.25, 1.5, 2].map(speed => (
                   <button
                     key={speed}
                     onClick={() => setPlaybackRate(speed)}
-                    className={`px-2 py-0.5 rounded font-bold transition-all ${
+                    className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer ${
                       playbackRate === speed 
-                        ? 'bg-indigo-600 text-white shadow-xs' 
-                        : 'hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-subtle)]'
+                        ? 'bg-indigo-600 text-white shadow-sm' 
+                        : 'hover:text-gray-700 hover:bg-gray-100'
                     }`}
                   >
                     {speed}x
@@ -486,11 +470,9 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
               </div>
             </div>
 
-            {/* Clean player strip toolbar - fallbacks and warning banners removed */}
             <div className="flex items-center gap-2.5 w-full md:w-auto justify-between md:justify-end flex-wrap">
-              {/* Standard active connection label only */}
-              <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/50 flex items-center gap-1 font-bold font-mono shadow-3xs">
-                ● Connected
+              <span className="text-[11px] text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5 font-medium">
+                ● Dialer Sync Active
               </span>
             </div>
 
@@ -499,14 +481,14 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-[var(--bg-card-solid)] px-6 py-2 border-b border-[var(--border-color)] flex items-center justify-between shrink-0 transition-colors">
-          <div className="flex items-center gap-1.5">
+        <div className="bg-white px-6 py-0 border-b border-[var(--border-color)] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setActiveTab('AUDIT')}
-              className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-3 text-[13px] font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'AUDIT' 
-                  ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20 shadow-inner' 
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-card-subtle)]'
+                  ? 'border-indigo-600 text-indigo-600 font-semibold' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <ShieldCheck className="w-4 h-4" />
@@ -515,22 +497,22 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
             <button
               onClick={() => setActiveTab('TRANSCRIPT')}
-              className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-3 text-[13px] font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'TRANSCRIPT' 
-                  ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 shadow-inner' 
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-card-subtle)]'
+                  ? 'border-indigo-600 text-indigo-600 font-semibold' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <MessageSquare className="w-4 h-4" />
-              <span>Speaker Diarized Transcript</span>
+              <span>Diarized Transcript</span>
             </button>
 
             <button
               onClick={() => setActiveTab('RAW_META')}
-              className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-3 text-[13px] font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'RAW_META' 
-                  ? 'bg-slate-500/10 text-[var(--text-primary)] border border-slate-500/20 shadow-inner' 
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-card-subtle)]'
+                  ? 'border-indigo-600 text-indigo-600 font-semibold' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <FileText className="w-4 h-4" />
@@ -539,11 +521,11 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
           </div>
 
           <div className="flex items-center gap-2 text-xs font-semibold">
-            <span className="text-[var(--text-secondary)]">Overall Score:</span>
-            <span className={`px-2.5 py-0.5 rounded-full font-extrabold text-xs ${
+            <span className="text-[var(--text-muted)]">Script Adherence:</span>
+            <span className={`px-2.5 py-0.5 rounded font-extrabold text-xs font-mono ${
               (call.overallScore || 0) >= 80 
-                ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' 
-                : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                ? 'bg-emerald-500/5 text-emerald-400 border border-emerald-500/10' 
+                : 'bg-rose-500/5 text-rose-450 border border-rose-500/10'
             }`}>
               {call.overallScore || 0}%
             </span>
@@ -557,54 +539,57 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
           {activeTab === 'AUDIT' && (() => {
             const alignment = analyzeScriptAlignment(call.transcript, PDF_SCRIPT_LINES);
 
-            const getCheckpointState = (lineId) => {
+            const getCheckpointState = (lineId, evalKey) => {
               const align = alignment[lineId];
-              if (!align) return { status: 'PENDING', label: 'Pending' };
-
-              const { status, seconds, matchTime } = align;
+              const aiEvalPassed = call.evaluation && typeof call.evaluation[evalKey] === 'boolean' ? call.evaluation[evalKey] : null;
               const isAudioFinished = duration > 0 && currentTime >= duration - 1;
 
-              if (showFinalReport || isAudioFinished) {
-                if (status === 'COMPLETED') return { status: 'COMPLETED', label: `Complete [${matchTime}]` };
-                if (status === 'TAKEN_LATER') return { status: 'TAKEN_LATER', label: `Taken Later [${matchTime}]` };
-                return { status: 'MISSED', label: 'Missed' };
+              if (showFinalReport || isAudioFinished || call.status === 'Audited') {
+                if (aiEvalPassed !== null) {
+                  if (aiEvalPassed) return { status: 'COMPLETED', label: '✓ PASSED' };
+                  return { status: 'MISSED', label: '✗ FAILED' };
+                }
+                if (align?.status === 'COMPLETED') return { status: 'COMPLETED', label: `✓ PASSED [${align.matchTime}]` };
+                if (align?.status === 'TAKEN_LATER') return { status: 'TAKEN_LATER', label: `✓ PASSED [${align.matchTime}]` };
+                return { status: 'MISSED', label: '✗ MISSED' };
               }
 
-              // Live mode matching
-              if (seconds !== null) {
-                if (currentTime >= seconds) {
-                  if (status === 'COMPLETED') return { status: 'COMPLETED', label: `Complete [${matchTime}]` };
-                  return { status: 'TAKEN_LATER', label: `Taken Later [${matchTime}]` };
+              // Live playback STT mode matching
+              if (align?.seconds !== null) {
+                if (currentTime >= align.seconds) {
+                  if (aiEvalPassed === false) return { status: 'MISSED', label: '✗ FAILED' };
+                  return { status: 'COMPLETED', label: `✓ PASSED [${align.matchTime}]` };
                 }
                 return { status: 'PENDING', label: 'Evaluating...' };
               } else {
                 const cutoff = CUTOFFS[lineId] || 999;
                 if (currentTime > cutoff) {
-                  return { status: 'MISSED', label: 'Missed' };
+                  if (aiEvalPassed === true) return { status: 'COMPLETED', label: '✓ PASSED' };
+                  return { status: 'MISSED', label: '✗ MISSED' };
                 }
                 return { status: 'PENDING', label: 'Evaluating...' };
               }
             };
 
             return (
-              <div className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto h-full">
+              <div className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto h-full items-stretch">
                 
                 {/* Left Column: Live Speech-to-Text alignment */}
                 <div className="flex-1 lg:w-3/5 space-y-4 flex flex-col min-h-0">
                   
                   {/* Critical Red Flag Alert Box if present */}
                   {call.hasRedFlags && call.redFlags && call.redFlags.length > 0 && (
-                    <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4 shadow-rose-500/5 shadow-sm shrink-0">
+                    <div className="bg-rose-500/5 border border-rose-500/10 rounded-xl p-4 shadow-sm shrink-0 text-left">
                       <div className="flex items-start gap-3">
-                        <div className="p-1.5 bg-rose-500/10 text-rose-500 rounded-lg shrink-0">
+                        <div className="p-1.5 bg-rose-500/10 text-rose-455 rounded-lg shrink-0">
                           <ShieldAlert className="w-5 h-5 animate-pulse" />
                         </div>
                         <div className="flex-1">
-                          <h3 className="font-extrabold text-rose-600 text-sm">Critical Compliance Violations ({call.redFlags.length})</h3>
-                          <div className="mt-2 space-y-1.5">
+                          <h3 className="font-extrabold text-rose-400 text-xs uppercase tracking-wide">Critical Compliance Violations ({call.redFlags.length})</h3>
+                          <div className="mt-2.5 space-y-2">
                             {call.redFlags.map((rf, idx) => (
-                              <div key={idx} className="bg-[var(--bg-card-solid)] border border-[var(--border-color)] p-2 rounded-lg text-xs font-semibold">
-                                <span className="text-rose-500 font-bold">⚠️ {rf.title}: </span>
+                              <div key={idx} className="bg-[var(--bg-card-solid)] border border-[var(--border-color)] p-2.5 rounded-lg text-xs font-semibold">
+                                <span className="text-rose-400 font-extrabold">⚠️ {rf.title}: </span>
                                 <span className="text-[var(--text-secondary)] font-medium">{rf.snippet || rf.description}</span>
                               </div>
                             ))}
@@ -615,14 +600,14 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                   )}
 
                   <div className="bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-4 shadow-xs shrink-0 text-left">
-                    <h3 className="font-extrabold text-sm text-[var(--text-primary)]">Speech-to-Text Live Transcript Stream</h3>
-                    <p className="text-[11px] text-[var(--text-secondary)] font-medium mt-0.5">
-                      Matched speech elements are automatically aligned with the PDF script checkpoints. Click to seek audio.
+                    <h3 className="font-extrabold text-xs text-[var(--text-primary)] uppercase tracking-wide">Speech-to-Text Aligned Stream</h3>
+                    <p className="text-[11px] text-[var(--text-muted)] font-medium mt-1 leading-relaxed">
+                      Auditor playback and compliance parsing workspace. Matched speech tags are aligned with script checkpoints. Click lines to seek.
                     </p>
                   </div>
 
                   {/* Transcript Bubbles Stream */}
-                  <div ref={transcriptContainerRef} className="flex-1 overflow-y-auto space-y-4 pr-2 max-h-[55vh]">
+                  <div ref={transcriptContainerRef} className="flex-1 overflow-y-auto space-y-4 pr-1.5 max-h-[50vh]">
                     {call.transcript && call.transcript.length > 0 ? (
                       call.transcript.map((line, idx) => {
                         const lineSec = parseTimeToSeconds(line.time);
@@ -653,35 +638,35 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                             }}
                             className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left ${
                               isActive
-                                ? 'bg-indigo-50/80 border-indigo-500 ring-4 ring-indigo-100/50 shadow-md scale-[1.01] stt-active-highlight'
+                                ? 'bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md stt-active-highlight'
                                 : isSpoken
                                 ? 'bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] shadow-sm'
-                                : 'bg-[var(--bg-card-solid)]/30 border-[var(--border-color)]/40 text-[var(--text-muted)] opacity-60'
+                                : 'bg-[var(--bg-card-solid)]/30 border-[var(--border-color)]/30 text-[var(--text-muted)] opacity-50'
                             } ${
-                              line.speaker === 'Agent' ? 'ml-0 mr-12' : 'ml-12 mr-0 bg-slate-50/60'
+                              line.speaker === 'Agent' ? 'ml-0 mr-12' : 'ml-12 mr-0 bg-slate-900/20'
                             }`}
                           >
-                            <div className="flex items-center justify-between text-[11px] mb-2 font-bold tracking-wide">
-                              <span className={`flex items-center gap-2 ${line.speaker === 'Agent' ? 'text-indigo-600' : 'text-emerald-600'}`}>
-                                <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
+                            <div className="flex items-center justify-between text-[10px] mb-2 font-bold tracking-wide">
+                              <span className={`flex items-center gap-1.5 ${line.speaker === 'Agent' ? 'text-indigo-400' : 'text-emerald-450'}`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
                                 {line.speaker === 'Agent' ? `Agent (${call.agentName})` : `Candidate (${call.candidateName})`}
                               </span>
                               <span className="font-mono text-[var(--text-muted)] font-semibold">{line.time}</span>
                             </div>
                             
-                            <p className="text-[13.5px] leading-relaxed font-medium text-[var(--text-primary)] whitespace-pre-line">
+                            <p className="text-xs sm:text-[13px] leading-relaxed font-medium text-[var(--text-primary)] whitespace-pre-line">
                               {renderWordByWordText(line, lineSec, nextLineSec)}
                             </p>
 
                             {matchedScriptLine && isSpoken && (
                               <div className="mt-3 flex items-center gap-1.5">
-                                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border ${
+                                <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded flex items-center gap-1 border ${
                                   alignment[matchedScriptLine.id].status === 'TAKEN_LATER'
-                                    ? 'bg-amber-50 border-amber-200 text-amber-700'
-                                    : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                    ? 'bg-amber-500/5 border-amber-500/10 text-amber-400'
+                                    : 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400'
                                 }`}>
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>Aligned Checkpoint: {matchedScriptLine.title}</span>
+                                  <Check className="w-3 h-3 shrink-0" />
+                                  <span>Aligned: {matchedScriptLine.title}</span>
                                 </span>
                               </div>
                             )}
@@ -689,129 +674,125 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                         );
                       })
                     ) : (
-                      <div className="text-center py-12 text-[var(--text-muted)] text-xs font-semibold">
-                        No transcript lines available.
+                      <div className="text-center py-12 text-[var(--text-muted)] text-xs font-semibold italic">
+                        No transcript lines available. Run AI audit.
                       </div>
                     )}
                   </div>
 
                   {/* Feedback Summary Card */}
-                  <div className="card-white p-4 shrink-0 text-left">
+                  <div className="card-white p-4.5 shrink-0 text-left">
                     <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-4 h-4 text-blue-500 fill-blue-500/10" />
-                      <h3 className="font-extrabold text-xs text-[var(--text-primary)] uppercase tracking-wider">AI Executive Quality Summary</h3>
+                      <Sparkles className="w-4 h-4 text-indigo-400" />
+                      <h3 className="font-extrabold text-[10px] text-[var(--text-primary)] uppercase tracking-wider">AI Audit Scorecard Summary</h3>
                     </div>
-                    <p className="text-xs text-[var(--text-primary)] leading-relaxed bg-[var(--bg-card-subtle)] p-3 rounded-lg border border-[var(--border-color)] font-medium">
+                    <p className="text-xs text-[var(--text-secondary)] leading-relaxed bg-[var(--bg-card-subtle)] p-3 rounded-lg border border-[var(--border-color)] font-semibold">
                       {call.evaluation?.feedback || "Call successfully evaluated."}
                     </p>
                   </div>
 
                 </div>
 
-                {/* Right Column: PDF script checkpoints & Call Quality Audits */}
+                {/* Right Column: Summarized Checkpoints & Voice Audits */}
                 <div className="w-full lg:w-2/5 flex flex-col min-h-0 gap-4">
 
                   {/* Technical & Voice Quality Audits Card */}
                   <div className="bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-4 shadow-sm shrink-0 text-left">
                     <div className="flex items-center gap-2 mb-3">
-                      <Volume2 className="w-4 h-4 text-indigo-500" />
-                      <h3 className="font-extrabold text-xs text-[var(--text-primary)] uppercase tracking-wider">Technical & Voice Quality Audit</h3>
+                      <Volume2 className="w-4 h-4 text-indigo-400" />
+                      <h3 className="font-extrabold text-[10px] text-[var(--text-primary)] uppercase tracking-wider">Voice Parameters Audit</h3>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg">
-                        <span className="text-[9px] text-[var(--text-secondary)] font-bold block uppercase tracking-wide">Voice Clarity</span>
+                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg font-semibold">
+                        <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-wide">Voice Clarity</span>
                         <span className={`font-extrabold flex items-center gap-1 mt-1 ${
-                          (call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? 'text-emerald-600' : 'text-amber-600'
+                          (call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? 'text-emerald-400' : 'text-amber-400'
                         }`}>
-                          {(call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '✓ Clear & Loud' : `⚠️ ${call.callQuality?.voiceClarity || 'Good'}`}
+                          {(call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '✓ Clear & Audible' : `⚠️ ${call.callQuality?.voiceClarity || 'Good'}`}
                         </span>
                       </div>
 
-                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg">
-                        <span className="text-[9px] text-[var(--text-secondary)] font-bold block uppercase tracking-wide">Connectivity / Network</span>
+                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg font-semibold">
+                        <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-wide">Connection</span>
                         <span className={`font-extrabold flex items-center gap-1 mt-1 ${
-                          (call.callQuality?.networkIssues === 'None' || !call.callQuality) ? 'text-emerald-600' : 'text-rose-600'
+                          (call.callQuality?.networkIssues === 'None' || !call.callQuality) ? 'text-emerald-400' : 'text-rose-400'
                         }`}>
-                          {(call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '✓ Stable Connection' : `⚠️ ${call.callQuality?.networkIssues || 'None'}`}
+                          {(call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '✓ Stable' : `⚠️ ${call.callQuality?.networkIssues || 'None'}`}
                         </span>
                       </div>
 
-                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg">
-                        <span className="text-[9px] text-[var(--text-secondary)] font-bold block uppercase tracking-wide">Ambient Noise</span>
+                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg font-semibold">
+                        <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-wide">Ambient Noise</span>
                         <span className={`font-extrabold flex items-center gap-1 mt-1 ${
-                          (call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? 'text-emerald-600' : 'text-amber-600'
+                          (call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? 'text-emerald-400' : 'text-amber-400'
                         }`}>
-                          {(call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '✓ Quiet Environment' : `⚠️ ${call.callQuality?.backgroundNoise || 'None'}`}
+                          {(call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '✓ Quiet' : `⚠️ ${call.callQuality?.backgroundNoise || 'None'}`}
                         </span>
                       </div>
 
-                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg">
-                        <span className="text-[9px] text-[var(--text-secondary)] font-bold block uppercase tracking-wide">Agent Tone & Pacing</span>
-                        <span className={`font-extrabold flex items-center gap-1 mt-1 ${
-                          (call.callQuality?.agentTone === 'Professional & Polite' || !call.callQuality) ? 'text-indigo-600' : 'text-amber-600'
-                        }`}>
-                          {call.callQuality?.agentTone || 'Professional & Polite'} ({call.callQuality?.agentPacing || 'Normal'})
+                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg font-semibold">
+                        <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-wide">Tone & Pace</span>
+                        <span className="font-extrabold flex items-center gap-1 mt-1 text-indigo-400">
+                          {call.callQuality?.agentTone || 'Polite'} ({call.callQuality?.agentPacing || 'Normal'})
                         </span>
                       </div>
                     </div>
 
-                    <div className="mt-3 bg-blue-500/5 border border-blue-500/10 p-2.5 rounded-lg flex items-center gap-2">
-                      <Users className="w-4 h-4 text-blue-500 shrink-0" />
-                      <div className="text-[11px] font-semibold text-[var(--text-primary)]">
-                        Candidate Sentiment: <strong className={`font-extrabold ${
-                          (call.callQuality?.candidateSentiment === 'Interested' || !call.callQuality) ? 'text-emerald-600' : 'text-slate-700'
-                        }`}>{call.callQuality?.candidateSentiment || 'Interested'}</strong>
+                    <div className="mt-3 bg-indigo-500/5 border border-indigo-500/10 p-2.5 rounded-lg flex items-center gap-2 font-semibold">
+                      <Users className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <div className="text-[11px] text-[var(--text-primary)]">
+                        Candidate Sentiment: <strong className="font-extrabold text-emerald-400">{call.callQuality?.candidateSentiment || 'Interested'}</strong>
                       </div>
                     </div>
                   </div>
 
-                  {/* PDF script checkpoints */}
-                  <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-4.5 shadow-xs text-left">
+                  {/* Summarized Script Checkpoints Checklist */}
+                  <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-4 shadow-sm text-left">
                     
                     <div className="pb-3 border-b border-[var(--border-color)] flex items-center justify-between shrink-0 mb-3">
                       <div>
-                        <h3 className="font-extrabold text-sm text-[var(--text-primary)]">PDF Script Alignment</h3>
-                        <p className="text-[10px] text-[var(--text-secondary)] font-medium mt-0.5">
-                          Verified checkpoint lines from PDF screening script.
+                        <h3 className="font-extrabold text-xs text-[var(--text-primary)] uppercase tracking-wide">Speech-to-Text Checkpoints</h3>
+                        <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5 leading-none">
+                          10 Checkpoints pass/fail audit results.
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2 bg-[var(--bg-card-subtle)] border border-[var(--border-color)] px-2 py-0.5 rounded-md shadow-3xs">
+                      <div className="flex items-center gap-1.5 bg-[var(--bg-card-subtle)] border border-[var(--border-color)] px-2 py-0.5 rounded shadow-3xs">
                         <input 
                           type="checkbox" 
                           id="toggleReport"
                           checked={!showFinalReport} 
                           onChange={(e) => setShowFinalReport(!e.target.checked)}
-                          className="w-3 h-3 text-indigo-600 rounded cursor-pointer"
+                          className="w-3.5 h-3.5 text-indigo-500 rounded cursor-pointer"
                         />
-                        <label htmlFor="toggleReport" className="text-[9px] font-extrabold text-[var(--text-secondary)] cursor-pointer select-none">
-                          Live STT Mode
+                        <label htmlFor="toggleReport" className="text-[9px] font-extrabold text-[var(--text-muted)] cursor-pointer select-none">
+                          Live Match Mode
                         </label>
                       </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[48vh]">
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[42vh]">
                       {PDF_SCRIPT_LINES.map((line, idx) => {
-                        const { status, label } = getCheckpointState(line.id);
+                        const { status, label } = getCheckpointState(line.id, line.evalKey);
                         const isClickable = alignment[line.id]?.seconds !== null;
 
-                        let circleBg = 'border-[var(--border-color)] bg-slate-100 text-slate-400';
-                        let statusLabelColor = 'text-[var(--text-muted)] bg-slate-50 border-slate-200';
-                        let itemBorderColor = 'border-[var(--border-color)]/70 hover:border-slate-300';
+                        let circleBg = 'border-gray-300 bg-gray-100 text-gray-400';
+                        let statusLabelColor = 'text-gray-500 bg-gray-100 border border-gray-200';
+                        let itemBorderColor = 'border-[var(--border-color)] bg-[var(--bg-card-subtle)]/40 hover:border-gray-400';
                         
                         if (status === 'COMPLETED') {
-                          circleBg = 'bg-emerald-500 border-emerald-600 text-white shadow-emerald-500/10 shadow-xs circle-completed';
-                          statusLabelColor = 'text-emerald-700 bg-emerald-50 border-emerald-200';
-                          itemBorderColor = 'border-emerald-200/60 bg-emerald-50/10';
+                          circleBg = 'bg-emerald-600 border-emerald-700 text-white shadow-xs font-black';
+                          statusLabelColor = 'text-emerald-700 bg-emerald-50 border border-emerald-200 font-extrabold';
+                          itemBorderColor = 'border-emerald-200/80 bg-emerald-50/30';
                         } else if (status === 'TAKEN_LATER') {
-                          circleBg = 'bg-amber-500 border-amber-600 text-white shadow-amber-500/10 shadow-xs circle-taken-later';
-                          statusLabelColor = 'text-amber-700 bg-amber-50 border-amber-200';
-                          itemBorderColor = 'border-amber-200/60 bg-amber-50/10';
+                          circleBg = 'bg-emerald-600 border-emerald-700 text-white shadow-xs font-black';
+                          statusLabelColor = 'text-emerald-700 bg-emerald-50 border border-emerald-200 font-extrabold';
+                          itemBorderColor = 'border-emerald-200/80 bg-emerald-50/30';
                         } else if (status === 'MISSED') {
-                          circleBg = 'bg-rose-500 border-rose-600 text-white shadow-rose-500/10 shadow-xs circle-missed';
-                          statusLabelColor = 'text-rose-700 bg-rose-50 border-rose-200';
-                          itemBorderColor = 'border-rose-200/60 bg-rose-50/10';
+                          circleBg = 'bg-rose-600 border-rose-700 text-white shadow-xs font-black';
+                          statusLabelColor = 'text-rose-700 bg-rose-50 border border-rose-200 font-extrabold';
+                          itemBorderColor = 'border-rose-200/80 bg-rose-50/30';
                         }
 
                         return (
@@ -829,27 +810,21 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                             }`}
                           >
                             <div className="flex items-start gap-2.5">
-                              <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${circleBg}`}>
-                                {status === 'COMPLETED' ? '✓' : status === 'TAKEN_LATER' ? '⏳' : status === 'MISSED' ? '✗' : idx + 1}
+                              <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-black shrink-0 mt-0.5 ${circleBg}`}>
+                                {status === 'COMPLETED' || status === 'TAKEN_LATER' ? '✓' : status === 'MISSED' ? '✗' : idx + 1}
                               </div>
 
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-1.5 flex-wrap">
                                   <span className="font-extrabold text-[var(--text-primary)] text-xs truncate">{line.title}</span>
-                                  <span className={`text-[8.5px] px-1.5 py-0.5 rounded font-mono border ${statusLabelColor}`}>
+                                  <span className={`text-[9.5px] px-2 py-0.5 rounded-md font-mono border ${statusLabelColor}`}>
                                     {label}
                                   </span>
                                 </div>
 
-                                <p className="text-[10.5px] text-[var(--text-secondary)] font-medium mt-1 leading-relaxed">
-                                  "{line.text}"
+                                <p className="text-[11px] text-[var(--text-secondary)] font-medium mt-1 leading-relaxed">
+                                  {line.summary || line.text}
                                 </p>
-
-                                {line.instruction && (
-                                  <p className="text-[9px] text-[var(--text-muted)] mt-1.5 italic font-bold">
-                                    Guideline: {line.instruction}
-                                  </p>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -868,9 +843,9 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
           {/* TAB 2: SPEAKER TRANSCRIPT */}
           {activeTab === 'TRANSCRIPT' && (
             <div className="max-w-3xl mx-auto space-y-3">
-              <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-xl text-xs text-blue-600 font-bold flex items-center justify-between shadow-2xs">
-                <span>AI Automated Speech-to-Text Diarization (Agent vs Candidate)</span>
-                <span className="font-mono text-[11px]">Duration: {call.talkTime}</span>
+              <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl text-xs text-indigo-400 font-bold flex items-center justify-between shadow-2xs font-mono">
+                <span>Speech-to-Text Diarization (Agent vs Candidate)</span>
+                <span>Duration: {call.talkTime || call.duration}</span>
               </div>
 
               {call.transcript && call.transcript.length > 0 ? (
@@ -890,24 +865,24 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                             setCurrentTime(lineSec);
                           }
                         }}
-                        className={`p-4.5 rounded-xl border transition-all duration-200 cursor-pointer ${
+                        className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
                           isActive
-                            ? 'bg-indigo-50/80 border-indigo-500 ring-4 ring-indigo-100/50 shadow-md scale-[1.01] stt-active-highlight-tab2'
+                            ? 'bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md stt-active-highlight-tab2'
                             : 'bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] shadow-sm'
                         } ${
                           line.speaker === 'Agent'
-                            ? 'ml-0 mr-12 shadow-sm'
-                            : 'ml-12 mr-0 bg-slate-50/40'
+                            ? 'ml-0 mr-12'
+                            : 'ml-12 mr-0 bg-slate-900/20'
                         }`}
                       >
-                        <div className="flex items-center justify-between text-[11px] mb-2 font-bold tracking-wide">
-                          <span className={`flex items-center gap-2 ${line.speaker === 'Agent' ? 'text-indigo-600' : 'text-emerald-600'}`}>
+                        <div className="flex items-center justify-between text-[10px] mb-2 font-bold tracking-wide">
+                          <span className={`flex items-center gap-1.5 ${line.speaker === 'Agent' ? 'text-indigo-400' : 'text-emerald-455'}`}>
                             <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
                             {line.speaker === 'Agent' ? `Agent (${call.agentName})` : `Candidate (${call.candidateName})`}
                           </span>
                           <span className="font-mono text-[var(--text-muted)] text-[10px]">{line.time}</span>
                         </div>
-                        <p className="text-[13.5px] leading-relaxed font-medium text-[var(--text-primary)] whitespace-pre-line">
+                        <p className="text-xs sm:text-[13px] leading-relaxed font-medium text-[var(--text-primary)] whitespace-pre-line">
                           {renderWordByWordText(line, lineSec, nextLineSec)}
                         </p>
                       </div>
@@ -915,8 +890,8 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                   })}
                 </div>
               ) : (
-                <div className="text-center py-12 text-[var(--text-muted)] text-xs font-semibold">
-                  No transcript available. Click "Run AI Audit" to generate transcript.
+                <div className="text-center py-12 text-[var(--text-muted)] text-xs font-semibold italic">
+                  No transcript available. Run AI audit.
                 </div>
               )}
             </div>
@@ -924,18 +899,18 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
           {/* TAB 3: RAW EXCEL METADATA (80+ fields) */}
           {activeTab === 'RAW_META' && (
-            <div className="max-w-4xl mx-auto bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-5 shadow-sm transition-colors">
-              <h3 className="font-extrabold text-[var(--text-primary)] text-sm mb-3">Raw Excel Row Attributes</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Date:</span> <strong className="text-[var(--text-primary)] font-bold">{call.callDate}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Caller ID:</span> <strong className="text-[var(--text-primary)] font-bold">{call.callerId}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Agent:</span> <strong className="text-[var(--text-primary)] font-bold">{call.agentName}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Campaign:</span> <strong className="text-[var(--text-primary)] font-bold">{call.campaign}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Queue:</span> <strong className="text-[var(--text-primary)] font-bold">{call.queue}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Candidate:</span> <strong className="text-[var(--text-primary)] font-bold">{call.candidateName}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Email:</span> <strong className="text-[var(--text-primary)] font-bold">{call.candidateEmail}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Disposition:</span> <strong className="text-[var(--text-primary)] font-bold">{call.disposition}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] font-medium col-span-full"><span className="text-[var(--text-muted)] font-mono block mb-0.5 text-[10px]">Audio URL:</span> <strong className="text-[var(--text-primary)] font-mono text-[10px] break-all select-all">{call.audioUrl}</strong></div>
+            <div className="max-w-4xl mx-auto bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-5 shadow-sm transition-colors text-left">
+              <h3 className="font-extrabold text-[var(--text-primary)] text-xs uppercase tracking-wider mb-4">Raw Call Ingestion Columns</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs font-semibold">
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Date:</span> <strong className="text-[var(--text-primary)] font-bold">{call.callDate}</strong></div>
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Caller ID:</span> <strong className="text-[var(--text-primary)] font-bold">{call.callerId}</strong></div>
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Agent:</span> <strong className="text-[var(--text-primary)] font-bold">{call.agentName}</strong></div>
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Campaign:</span> <strong className="text-[var(--text-primary)] font-bold">{call.campaign}</strong></div>
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Queue:</span> <strong className="text-[var(--text-primary)] font-bold">{call.queue}</strong></div>
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Candidate:</span> <strong className="text-[var(--text-primary)] font-bold">{call.candidateName}</strong></div>
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Email:</span> <strong className="text-[var(--text-primary)] font-bold">{call.candidateEmail}</strong></div>
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Disposition:</span> <strong className="text-[var(--text-primary)] font-bold">{call.disposition}</strong></div>
+                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] col-span-full"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Audio URL Link:</span> <strong className="text-[var(--text-primary)] font-mono text-[10px] break-all select-all font-medium">{call.audioUrl}</strong></div>
               </div>
             </div>
           )}

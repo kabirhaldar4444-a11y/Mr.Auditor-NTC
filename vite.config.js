@@ -44,26 +44,26 @@ export default defineConfig({
       name: 'slashrtc-audio-proxy',
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
-          if (req.url.startsWith('/api/gemini-proxy')) {
+          if (req.url.startsWith('/api/openai-proxy')) {
             try {
               let bodyText = '';
               req.on('data', chunk => { bodyText += chunk; });
               req.on('end', async () => {
-                const apiKey = 'AQ.Ab8RN6KIU-W1ienOfMmHx1AV9rRF7t_D7Lie-1YXtSxkMhlckQ';
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+                const openaiKey = req.headers['x-api-key'] || '';
+                const url = `https://api.openai.com/v1/chat/completions`;
                 
-                const geminiResponse = await fetch(url, {
+                const openaiResponse = await fetch(url, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
-                    'Referer': 'http://localhost:5173/'
+                    'Authorization': `Bearer ${openaiKey}`
                   },
                   body: bodyText
                 });
 
-                res.setHeader('Content-Type', geminiResponse.headers.get('content-type') || 'application/json');
-                res.statusCode = geminiResponse.status;
-                const resText = await geminiResponse.text();
+                res.setHeader('Content-Type', openaiResponse.headers.get('content-type') || 'application/json');
+                res.statusCode = openaiResponse.status;
+                const resText = await openaiResponse.text();
                 res.end(resText);
               });
             } catch (err) {
@@ -72,6 +72,37 @@ export default defineConfig({
             }
             return;
           }
+
+          if (req.url.startsWith('/api/openai-whisper-proxy')) {
+            try {
+              let chunks = [];
+              req.on('data', chunk => chunks.push(chunk));
+              req.on('end', async () => {
+                const openaiKey = req.headers['x-api-key'] || '';
+                const bodyBuffer = Buffer.concat(chunks);
+                const contentType = req.headers['content-type'] || 'multipart/form-data';
+
+                const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${openaiKey}`,
+                    'Content-Type': contentType
+                  },
+                  body: bodyBuffer
+                });
+
+                res.setHeader('Content-Type', whisperResponse.headers.get('content-type') || 'application/json');
+                res.statusCode = whisperResponse.status;
+                const resText = await whisperResponse.text();
+                res.end(resText);
+              });
+            } catch (err) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: { message: err.message } }));
+            }
+            return;
+          }
+
 
           if (req.url.startsWith('/api/audio-proxy')) {
             const urlObj = new URL(req.url, `http://${req.headers.host}`);

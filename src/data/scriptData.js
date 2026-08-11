@@ -126,409 +126,7 @@ export const RED_FLAG_RULES = [
   }
 ];
 
-export const SAMPLE_INITIAL_DATA = [
-  {
-    id: "CALL-2026-0807-001",
-    callDate: "08/07/26 17:15",
-    callerId: "2498521",
-    agentName: "Naukri Vikalp",
-    agentCode: "NKVIKALP",
-    campaign: "Naukri Screening",
-    queue: "DPRScreening1",
-    duration: "0:04:15",
-    talkTime: "0:04:05",
-    holdTime: "0:00:10",
-    callType: "Candidate Screening / Job Pitch",
-    disposition: "INTERESTED_AUDITED",
-    candidateName: "Nataraj Krishnan",
-    candidateEmail: "nataraj.krishnan@gmail.com",
-    campaignStage: "Initial_Screening_Pass",
-    audioUrl: "https://aramcoindia.slashrtc.in/index.php/download/generateLink/recording/dpr-nat-001/play/9964757555/2026-08-07/out/false",
-    audioStatus: "ACTIVE_SLASH_LINK",
-    status: "Audited",
-    overallScore: 100,
-    complianceStatus: "Passed",
-    hasRedFlags: false,
-    redFlagsCount: 0,
-    redFlags: [],
-    transcript: [
-      { speaker: "Agent", time: "00:02", text: "Good morning! Am I speaking with Nataraj Krishnan?" },
-      { speaker: "Candidate", time: "00:07", text: "Yes, this is Nataraj speaking. Who is this?" },
-      { speaker: "Agent", time: "00:10", text: "This is Vikalp, your Relationship Manager from Naukri.com. I hope you are doing well! Is this a good time to connect?" },
-      { speaker: "Candidate", time: "00:18", text: "Yes, it is a good time. Tell me what this is regarding." },
-      { speaker: "Agent", time: "00:22", text: "I’m reaching out to inform you about an exciting job opportunity with one of our premium hiring partners. But before we continue, please note that this call is recorded for training and quality purposes. Also, please be aware that Naukri.com never asks for any money to appear for interviews or for job confirmations, and we do not guarantee job offers." },
-      { speaker: "Candidate", time: "00:41", text: "Alright, thanks for letting me know. I appreciate that warning." },
-      { speaker: "Agent", time: "00:46", text: "Just wanted to confirm — are you currently open to a job switch or New Job?" },
-      { speaker: "Candidate", time: "00:52", text: "Yes, I am actively looking for new opportunities in civil construction." },
-      { speaker: "Agent", time: "00:57", text: "Perfect. Since you are interested, let me ask a few basic questions. May I know your last or recent Job Title?" },
-      { speaker: "Candidate", time: "01:05", text: "I was working as a Planning Engineer." },
-      { speaker: "Agent", time: "01:08", text: "And what is your Preferred Job Title?" },
-      { speaker: "Candidate", time: "01:12", text: "I am looking for a Senior Planning Engineer or Assistant Project Manager role." },
-      { speaker: "Agent", time: "01:17", text: "Got it. May I know your last or recent Work Location?" },
-      { speaker: "Candidate", time: "01:21", text: "My last work location was Pune." },
-      { speaker: "Agent", time: "01:24", text: "And what is your Preferred Work Location? State or Country?" },
-      { speaker: "Candidate", time: "01:29", text: "I would prefer Bangalore, Mumbai, or even international locations." },
-      { speaker: "Agent", time: "01:34", text: "Great! Based on your profile, I’d like to inform you that DPR Construction has exciting openings that match your experience and preferences." },
-      { speaker: "Candidate", time: "01:44", text: "That is excellent. Can you tell me more about DPR Construction?" },
-      { speaker: "Agent", time: "01:48", text: "Yes! Here’s a quick overview: DPR Construction is a multinational engineering company delivering roads, metro, railway, power, mining, manufacturing, and high-rise infrastructure projects worldwide since 1990. In 2015, DPR Construction expanded its footprint beyond India, collaborating with governments, developers, and private enterprises worldwide to deliver mega-level projects that shape skylines and transform communities. Their headquarters is in the USA, and they have offices in Mumbai, India, Paris, Dubai, Tokyo, Australia, and Mexico to remain close to their clients. You can visit their website at www.dprusa.in. We encourage you to visit the site post-call for deeper insight." },
-      { speaker: "Candidate", time: "02:30", text: "Thanks, the profile seems very strong. I actually saw a posting from them recently." },
-      { speaker: "Agent", time: "02:35", text: "Yes! I see you’ve applied earlier — however, new openings have been released under fresh project cycles. You’re eligible to reapply without any cost." },
-      { speaker: "Candidate", time: "02:46", text: "Okay, perfect. Let's do that." },
-      { speaker: "Agent", time: "02:49", text: "Before we proceed, I need to ask you a few quick verification questions: Total years of experience?" },
-      { speaker: "Candidate", time: "02:56", text: "I have 7 years of total experience." },
-      { speaker: "Agent", time: "02:59", text: "Are you currently employed?" },
-      { speaker: "Candidate", time: "03:02", text: "Yes, I am working." },
-      { speaker: "Agent", time: "03:04", text: "Your last organization and work location?" },
-      { speaker: "Candidate", time: "03:07", text: "It is L&T Infrastructure in Pune." },
-      { speaker: "Agent", time: "03:10", text: "Your key roles and responsibilities in your recent role?" },
-      { speaker: "Candidate", time: "03:14", text: "Site layout planning, resource coordination, and progress tracking." },
-      { speaker: "Agent", time: "03:19", text: "Department or Division you were part of?" },
-      { speaker: "Candidate", time: "03:22", text: "Planning and Projects division." },
-      { speaker: "Agent", time: "03:25", text: "Highest educational qualification?" },
-      { speaker: "Candidate", time: "03:28", text: "I have a Bachelor's in Civil Engineering." },
-      { speaker: "Agent", time: "03:31", text: "Year of graduation?" },
-      { speaker: "Candidate", time: "03:33", text: "I graduated in 2019." },
-      { speaker: "Agent", time: "03:36", text: "Any domain-specific certifications?" },
-      { speaker: "Candidate", time: "03:39", text: "Yes, AutoCAD and basic Primavera training." },
-      { speaker: "Agent", time: "03:43", text: "Last drawn monthly in-hand salary?" },
-      { speaker: "Candidate", time: "03:46", text: "It is 80,000 rupees in-hand." },
-      { speaker: "Agent", time: "03:49", text: "Expected in-hand salary from next job?" },
-      { speaker: "Candidate", time: "03:52", text: "I expect around 1,15,000 rupees in-hand." },
-      { speaker: "Agent", time: "03:56", text: "Have you interviewed with DPR Construction in the last 6 months?" },
-      { speaker: "Candidate", time: "04:00", text: "No, never." },
-      { speaker: "Agent", time: "04:02", text: "Your current age?" },
-      { speaker: "Candidate", time: "04:04", text: "I am 29 years old." },
-      { speaker: "Agent", time: "04:06", text: "If selected, how soon can you join?" },
-      { speaker: "Candidate", time: "04:09", text: "My notice period is 30 days, so I can join in one month." },
-      { speaker: "Agent", time: "04:13", text: "Perfect. I will log these responses in the system sheet." },
-      { speaker: "Candidate", time: "04:17", text: "Sure, thank you." },
-      { speaker: "Agent", time: "04:19", text: "Would you prefer domestic projects in India or are you open to international roles as well?" },
-      { speaker: "Candidate", time: "04:25", text: "I am definitely open to international roles." },
-      { speaker: "Agent", time: "04:28", text: "DPR Construction is currently hiring for major international construction and infrastructure projects in USA, Australia, Singapore, Malaysia, Indonesia, Philippines, Vietnam, United Arab Emirates, Qatar, Saudi Arabia, Oman, United Kingdom, Germany, Netherlands, South Africa, Kenya, Canada, and many other countries for roles across Project Management, Safety, Site Execution, Planning, and more." },
-      { speaker: "Candidate", time: "04:54", text: "What are the benefits for international placements?" },
-      { speaker: "Agent", time: "04:57", text: "If interested, key international benefits include a 100% Salary Hike based on profile and location, an Employer-Sponsored Work Visa, Family Accommodation & Dependent Visa, Travel, Relocation & Onsite Benefits, Tax-Compliant Salary Packages, and Insurance & Emergency Support." },
-      { speaker: "Candidate", time: "05:18", text: "That sounds like a very attractive package." },
-      { speaker: "Agent", time: "05:22", text: "Before proceeding with your job application, please note that DPR Construction works on international and government-aligned infrastructure projects that require strict compliance with technical qualifications and industry standards. As part of their onboarding process, candidates are expected to either possess or be willing to enrol in relevant professional certifications based on their role and department. Examples include OSHA, NEBOSH, or IOSH for safety; PMP, Primavera P6, or MSP for project management; AutoCAD, Revit, or BIM for construction tech; and QA/QC, ACI, or NDT for civil inspection. If you do not currently hold these certifications, you will be required to enrol in an accredited institution immediately after selection and submit proof of enrolment. Please note that failure to submit the required certifications will result in cancellation of your job offer." },
-      { speaker: "Candidate", time: "06:14", text: "I understand that completely. I already have AutoCAD, and I am willing to enrol in Primavera P6." },
-      { speaker: "Agent", time: "06:21", text: "Great. Your profile will now be submitted to the DPR Construction hiring team. You may expect a response in 2–3 business days if shortlisted. Kindly email your updated resume to contact@naukriedge.com. For further assistance, feel free to reach me between 10 AM and 7:30 PM, or contact our business desk at 8042364767." },
-      { speaker: "Candidate", time: "06:45", text: "Alright, I will send my resume right away." },
-      { speaker: "Agent", time: "06:48", text: "Also, as part of their selection process, if you are shortlisted and selected with DPR Construction, you will be eligible for a Joining Bonus of approximately ₹5,0,000 INR." },
-      { speaker: "Candidate", time: "07:00", text: "Wow, 5 Lakhs joining bonus! That is fantastic." },
-      { speaker: "Agent", time: "07:04", text: "It was great speaking with you! DPR Construction offers a fantastic opportunity to grow with one of the world’s leading construction and engineering firms. Thank you for your time and interest—wishing you all the best in your journey ahead! Please make sure to visit their website www.dprusa.in to review Project Details, Branch Address, and Leadership Team details as part of your preparation." },
-      { speaker: "Candidate", time: "07:30", text: "Thank you so much. I will check the website navigation immediately." },
-      { speaker: "Agent", time: "07:35", text: "You're welcome. Have a wonderful day!" }
-    ],
-    evaluation: {
-      greetingPassed: true,
-      hrIntroPassed: true,
-      eligibilityPassed: true,
-      companyOverviewPassed: true,
-      screeningQuestionsPassed: true,
-      globalPitchPassed: true,
-      behavioralPassed: true,
-      certificationsPassed: true,
-      joiningBonusPassed: true,
-      websiteRedirectPassed: true,
-      feedback: "Perfect compliance. The agent strictly followed the script: introduced themselves as Relationship Manager from Naukri.com, mentioned recording and money disclaimers, asked all basic and verification questions, pitched domestic/international roles and benefits, explained mandatory certification and enrolment policies, stated next steps and joining bonus details, and explicitly instructed the candidate to visit www.dprusa.in for branch address and project details."
-    }
-  },
-  {
-    id: "CALL-2026-0807-002",
-    callDate: "08/07/26 16:45",
-    callerId: "2498398",
-    agentName: "Naukri Vikalp",
-    agentCode: "NKVIKALP",
-    campaign: "Naukri Screening",
-    queue: "DPRScreening1",
-    duration: "0:02:15",
-    talkTime: "0:02:10",
-    holdTime: "0:00:05",
-    callType: "Candidate Screening",
-    disposition: "COMPLIANCE_FAILED",
-    candidateName: "Rohan Verma",
-    candidateEmail: "rohan.verma@gmail.com",
-    campaignStage: "Failed_Review",
-    audioUrl: "https://aramcoindia.slashrtc.in/index.php/download/generateLink/recording/dpr-roh-002/play/9876543210/2026-08-07/out/false",
-    audioStatus: "ACTIVE_SLASH_LINK",
-    status: "Audited",
-    overallScore: 30,
-    complianceStatus: "Critical Fail",
-    hasRedFlags: true,
-    redFlagsCount: 3,
-    redFlags: [
-      {
-        code: "RF_USED_SIR_MAAM",
-        severity: "MEDIUM",
-        title: "Used Formal Title (Sir/Ma'am)",
-        snippet: "Agent addressed candidate as 'Sir' multiple times during call."
-      },
-      {
-        code: "RF_FAKE_CERT_SELLING",
-        severity: "CRITICAL",
-        title: "Paid Fake Certificate Recommendation",
-        snippet: "Agent suggested buying a professional certificate from Naukri without exams."
-      },
-      {
-        code: "RF_MISSING_WEBSITE_REDIRECT",
-        severity: "HIGH",
-        title: "Did Not Mention www.dprusa.in Website",
-        snippet: "Call ended without instructing candidate to visit official website navigation."
-      }
-    ],
-    transcript: [
-      { speaker: "Agent", time: "00:02", text: "Good afternoon Sir, am I speaking with Rohan Verma?" },
-      { speaker: "Candidate", time: "00:07", text: "Yes, I am Rohan. Who is this?" },
-      { speaker: "Agent", time: "00:10", text: "This is Vikalp calling from Naukri.com, Sir. I hope you are doing well. I want to tell you about openings in DPR Construction. Is it a good time?" },
-      { speaker: "Candidate", time: "00:20", text: "Yes, tell me." },
-      { speaker: "Agent", time: "00:22", text: "Great. DPR Construction has openings. Do you have a PMP or OSHA certificate, Sir?" },
-      { speaker: "Candidate", time: "00:30", text: "No, I don't have those. Is it mandatory?" },
-      { speaker: "Agent", time: "00:34", text: "Yes, Sir. But do not worry. You can purchase the PC certificate directly from Naukri.com without any studies or examinations. You just need to pay 5,000 rupees fee, and we will issue it and upload it for you." },
-      { speaker: "Candidate", time: "00:50", text: "Wait, is that legal? Don't we have to give exams?" },
-      { speaker: "Agent", time: "00:54", text: "Yes, Sir, it is completely authorized. Our back-end team will handle it. Just pay the certification fee and send your resume. The company will select you." },
-      { speaker: "Candidate", time: "01:06", text: "Okay, I will think about it and let you know." },
-      { speaker: "Agent", time: "01:10", text: "Please send your resume to contact@naukriedge.com and make the payment soon. Thank you for your time, Sir." },
-      { speaker: "Candidate", time: "01:20", text: "Okay, goodbye." }
-    ],
-    evaluation: {
-      greetingPassed: false,
-      hrIntroPassed: true,
-      eligibilityPassed: true,
-      companyOverviewPassed: false,
-      screeningQuestionsPassed: false,
-      globalPitchPassed: false,
-      behavioralPassed: false,
-      certificationsPassed: false,
-      joiningBonusPassed: false,
-      websiteRedirectPassed: false,
-      feedback: "CRITICAL FAILURE: The agent used the prohibited honorific 'Sir' multiple times. More critically, the agent engaged in fraudulent certification recommendation, advising the candidate to purchase a professional certificate from Naukri without exams. The agent also completely failed to mention the mandatory website redirection statement for www.dprusa.in."
-    }
-  },
-  {
-    id: "CALL-2026-0807-003",
-    callDate: "08/07/26 15:30",
-    callerId: "2498210",
-    agentName: "Naukri Vikalp",
-    agentCode: "NKVIKALP",
-    campaign: "Naukri Screening",
-    queue: "DPRScreening1",
-    duration: "0:03:30",
-    talkTime: "0:03:20",
-    holdTime: "0:00:10",
-    callType: "Candidate Screening",
-    disposition: "INTERESTED_AUDITED",
-    candidateName: "Priya Sharma",
-    candidateEmail: "priya.sharma@outlook.com",
-    campaignStage: "Initial_Screening_Pass",
-    audioUrl: "https://aramcoindia.slashrtc.in/index.php/download/generateLink/recording/dpr-priya-003/play/9988776655/2026-08-07/out/false",
-    audioStatus: "ACTIVE_SLASH_LINK",
-    status: "Audited",
-    overallScore: 90,
-    complianceStatus: "Passed",
-    hasRedFlags: false,
-    redFlagsCount: 0,
-    redFlags: [],
-    transcript: [
-      { speaker: "Agent", time: "00:02", text: "Good afternoon! Am I speaking with Priya Sharma?" },
-      { speaker: "Candidate", time: "00:06", text: "Yes, I am Priya speaking. How can I help you?" },
-      { speaker: "Agent", time: "00:09", text: "Hi Priya, this is Vikalp, your Relationship Manager from Naukri.com. I hope you are doing well! Is this a good time to connect?" },
-      { speaker: "Candidate", time: "00:17", text: "Yes, I can speak. Go ahead." },
-      { speaker: "Agent", time: "00:20", text: "I’m calling about an exciting job opportunity with one of our premium hiring partners. Please note that this call is recorded for training and quality purposes. Also, Naukri never asks for any money to appear for interviews or job confirmations, and we do not guarantee job offers." },
-      { speaker: "Candidate", time: "00:38", text: "Okay, I understand." },
-      { speaker: "Agent", time: "00:41", text: "Just wanted to check — are you currently open to a job switch or New Job?" },
-      { speaker: "Candidate", time: "00:46", text: "Yes, I am looking for a change." },
-      { speaker: "Agent", time: "00:49", text: "Great. May I know your last or recent Job Title?" },
-      { speaker: "Candidate", time: "00:53", text: "I am currently working as a Site Safety Officer." },
-      { speaker: "Agent", time: "00:56", text: "And what is your Preferred Job Title?" },
-      { speaker: "Candidate", time: "01:00", text: "Senior Safety Manager or Lead Safety Officer." },
-      { speaker: "Agent", time: "01:04", text: "May I know your last or recent Work Location?" },
-      { speaker: "Candidate", time: "01:08", text: "I am based in Chennai." },
-      { speaker: "Agent", time: "01:10", text: "And your Preferred Work Location?" },
-      { speaker: "Candidate", time: "01:14", text: "Chennai, Bangalore, or Middle East." },
-      { speaker: "Agent", time: "01:17", text: "Excellent! Based on your profile, DPR Construction has exciting openings that match your experience." },
-      { speaker: "Candidate", time: "01:25", text: "Tell me about the company." },
-      { speaker: "Agent", time: "01:28", text: "DPR Construction is a multinational engineering company delivering roads, metro, railway, and high-rise infrastructure projects since 1990. They have offices worldwide including USA and Mumbai BKC." },
-      { speaker: "Candidate", time: "01:42", text: "I see. Have they worked on projects in India?" },
-      { speaker: "Agent", time: "01:46", text: "Yes, they have completed several projects in India, like the Agartala Rail Link and the Guwahati Airport New Terminal. You can find more details on their official website www.dprusa.in." },
-      { speaker: "Candidate", time: "02:00", text: "Okay, I'll check it out." },
-      { speaker: "Agent", time: "02:03", text: "Before we proceed, let's complete a quick eligibility check: How many years of experience do you have?" },
-      { speaker: "Candidate", time: "02:10", text: "I have 6 years in industrial construction safety." },
-      { speaker: "Agent", time: "02:14", text: "Are you currently employed?" },
-      { speaker: "Candidate", time: "02:17", text: "Yes, with Tata Projects." },
-      { speaker: "Agent", time: "02:20", text: "What is your last drawn monthly in-hand salary?" },
-      { speaker: "Candidate", time: "02:24", text: "It's 75,000 in-hand." },
-      { speaker: "Agent", time: "02:27", text: "And your expected in-hand salary?" },
-      { speaker: "Candidate", time: "02:30", text: "I am expecting 1,00,000 rupees in-hand." },
-      { speaker: "Agent", time: "02:34", text: "If selected, how soon can you join us?" },
-      { speaker: "Candidate", time: "02:37", text: "I can join in 15 days as my project is wrapping up." },
-      { speaker: "Agent", time: "02:41", text: "I will log this in the system. Now, would you prefer India projects or are you open to international roles?" },
-      { speaker: "Candidate", time: "02:49", text: "I am open to international assignments." },
-      { speaker: "Agent", time: "02:52", text: "Excellent. DPR is hiring for international roles in USA, Australia, and Singapore. The benefits include a 100% salary hike, work visa, and family accommodation. Please note that since DPR works on government projects, certifications like OSHA Safety or NEBOSH are mandatory. If you don't have them, you will need to enrol in an accredited school immediately after selection." },
-      { speaker: "Candidate", time: "03:15", text: "Yes, I have an OSHA certificate already." },
-      { speaker: "Agent", time: "03:19", text: "Perfect! We will submit your profile. If shortlisted, you will hear in 2-3 business days. Please email your resume to contact@naukriedge.com. If selected, you may also get a joining bonus of up to 5,00,000 INR." },
-      { speaker: "Candidate", time: "03:35", text: "Wow, sounds perfect. I will mail the resume." },
-      { speaker: "Agent", time: "03:39", text: "It was great speaking with you! Thank you for your time. All the best! Do visit www.dprusa.in to review Project Details and Branch Address as you prepare." },
-      { speaker: "Candidate", time: "03:52", text: "Thank you. Goodbye!" }
-    ],
-    evaluation: {
-      greetingPassed: true,
-      hrIntroPassed: true,
-      eligibilityPassed: true,
-      companyOverviewPassed: true,
-      screeningQuestionsPassed: true,
-      globalPitchPassed: true,
-      behavioralPassed: true,
-      certificationsPassed: true,
-      joiningBonusPassed: true,
-      websiteRedirectPassed: true,
-      feedback: "High compliance. Followed the core script flow. Greeting, disclaimers, titles, locations, and verification questions were covered. Stated mandatory certifications, next steps, joining bonus, and website redirection instructions properly."
-    }
-  },
-  {
-    id: "CALL-2026-0807-004",
-    callDate: "08/07/26 18:30",
-    callerId: "2498612",
-    agentName: "Naukri Vikalp",
-    agentCode: "NKVIKALP",
-    campaign: "Naukri Screening",
-    queue: "DPRScreening1",
-    duration: "0:04:45",
-    talkTime: "0:04:35",
-    holdTime: "0:00:10",
-    callType: "Candidate Screening",
-    disposition: "INTERESTED_AUDITED",
-    candidateName: "Ajay Verma",
-    candidateEmail: "ajay.verma@gmail.com",
-    campaignStage: "Initial_Screening_Pass",
-    audioUrl: "https://aramcoindia.slashrtc.in/index.php/download/generateLink/recording/dpr-ajay-004/play/9955883344/2026-08-07/out/false",
-    audioStatus: "ACTIVE_SLASH_LINK",
-    status: "Audited",
-    overallScore: 100,
-    complianceStatus: "Passed",
-    hasRedFlags: false,
-    redFlagsCount: 0,
-    redFlags: [],
-    transcript: [
-      { speaker: "Agent", time: "00:02", text: "Namaste! Kya meri baat Ajay Verma ji se ho rahi hai?" },
-      { speaker: "Candidate", time: "00:07", text: "Haan ji, main Ajay bol raha hoon. Kaun?" },
-      { speaker: "Agent", time: "00:10", text: "Namaste Ajay ji, main Vikalp bol raha hoon, Naukri.com se aapka Relationship Manager. Kya aapse baat karne ka yeh sahi samay hai?" },
-      { speaker: "Candidate", time: "00:18", text: "Haan, abhi main free hoon. Bataiye." },
-      { speaker: "Agent", time: "00:22", text: "Ajay ji, main aapko ek behtareen job opportunity ke baare mein batane ke liye call kar raha hoon jo hamare premium hiring partner ke sath hai. Aage badhne se pehle, dhyan dein ki yeh call training aur quality ke liye record ki ja rahi hai. Aur Naukri kabhi bhi interview ya job confirmation ke liye koi paise nahi maangta, aur hum job offer ki guarantee nahi dete." },
-      { speaker: "Candidate", time: "00:41", text: "Theek hai, main samajh gaya." },
-      { speaker: "Agent", time: "00:46", text: "Kya aap abhi job switch ya new job ke liye open hain? Aur aapki recent job title kya hai?" },
-      { speaker: "Candidate", time: "00:52", text: "Haan, main job change karna chahta hoon. Meri abhi ki job title Planning Engineer hai L&T mein." },
-      { speaker: "Agent", time: "00:57", text: "Bahut accha. Hum jis company ke liye pitch kar rahe hain uska naam hai DPR Construction. Yeh ek multinational engineering company hai jo roads, metro, railway, power, mining, and high-rise projects deliver karti hai worldwide since 1990. Inka headquarter USA mein hai, aur inke offices Mumbai, Paris, Dubai, Tokyo mein hain. Inki official website www.dprusa.in hai." },
-      { speaker: "Candidate", time: "01:21", text: "DPR ek acchi company lag rahi hai." },
-      { speaker: "Agent", time: "01:25", text: "Haan ji. Agar aapne pehle apply kiya hai toh aap bina kisi cost ke reapply kar sakte hain. Aur agar aap abhi interested hain toh hum aapse kuch eligibility verification sawal puchenge sheet mein log karne ke liye." },
-      { speaker: "Candidate", time: "01:45", text: "Haan, puchiye." },
-      { speaker: "Agent", time: "01:50", text: "Aapka total years of experience kitna hai? Aur expected salary kya hai?" },
-      { speaker: "Candidate", time: "02:10", text: "Mera experience 5 saal ka hai aur expected salary 12 LPA hai." },
-      { speaker: "Agent", time: "02:15", text: "Theek hai. Yeh opportunities domestic projects India ke liye bhi hain aur international roles USA, Singapore aur Dubai ke liye bhi hain. International benefits mein 100% salary hike aur work visa milta hai. Lekin strict compliance ke liye, AutoCAD aur Primavera P6 jaise certifications mandatory hain. Agar aapke paas nahi hain toh aapko immediate enrol karna hoga, nahi toh job offer cancel ho sakta hai." },
-      { speaker: "Candidate", time: "02:35", text: "Mere paas AutoCAD hai, main Primavera ka enrolment kar lunga." },
-      { speaker: "Agent", time: "02:58", text: "Aap apna resume contact@naukriedge.com par email kar dijiye. Selected candidates ko ₹5,0,000 INR tak ka joining bonus bhi milta hai. Aapse 2-3 business days mein contact kiya jayega. Aur Ajay ji, please ek baar inki website www.dprusa.in par jaakar project details, branch address aur leadership team details zaroor check kar lein." },
-      { speaker: "Candidate", time: "03:15", text: "Haan, main zaroor check karunga. Dhanyawad." },
-      { speaker: "Agent", time: "03:22", text: "Aapse baat karke bahut accha laga! Thank you, have a great day!" },
-      { speaker: "Candidate", time: "03:30", text: "Goodbye." }
-    ],
-    evaluation: {
-      greetingPassed: true,
-      hrIntroPassed: true,
-      eligibilityPassed: true,
-      companyOverviewPassed: true,
-      screeningQuestionsPassed: true,
-      globalPitchPassed: true,
-      behavioralPassed: true,
-      certificationsPassed: true,
-      joiningBonusPassed: true,
-      websiteRedirectPassed: true,
-      feedback: "Multilingual verification pass. Agent successfully screened candidate in Hinglish/Hindi, following the required DPR Construction checkpoints, including disclaimers, experience/salary questions, locations, mandatory certifications, next steps, and instructions to visit www.dprusa.in."
-    }
-  }
-];
-
-export const PDF_SCRIPT_LINES = [
-  {
-    id: "PL1",
-    title: "Greeting & Confirmation",
-    text: "Good morning/Afternoon/Evening! Am I speaking with [Candidate's Name]?... This is [Your Pseudo Name], your Relationship Manager from Naukri.com. Is this a good time to connect?",
-    instruction: "Introduce as Naukri Relationship Manager. AVOID using 'Sir' or 'Ma'am'.",
-    keywords: ["speaking with", "relationship manager", "naukri.com", "time to connect", "baat", "samay", "sahi time", "naukri"],
-    prohibited: ["sir", "ma'am", "madam"],
-    section: "Greeting"
-  },
-  {
-    id: "PL2",
-    title: "Purpose of Call & Disclaimers",
-    text: "I’m reaching out to inform you about an exciting job opportunity with one of our premium hiring partners. Please note: This call is recorded... Naukri.com never asks for any money... We also do not guarantee job offers.",
-    instruction: "Must mention call recording, no-fee disclaimer, and no-guarantee disclaimer.",
-    keywords: ["opportunity", "recorded", "never asks", "money", "guarantee job", "avsar", "mauka", "record", "paise", "rupay", "guarantee"],
-    section: "Purpose"
-  },
-  {
-    id: "PL3",
-    title: "Job Switch & Basic Questions",
-    text: "Just wanted to confirm — are you currently open to a job switch or New Job?... May I know your last/Recent Job Title?... Preferred Job Title?... Recent Work Location?... Preferred Work Location?",
-    instruction: "Confirm job search status and ask recent/preferred titles and locations.",
-    keywords: ["job switch", "new job", "job title", "work location", "naukri badalna", "job change", "location", "position"],
-    section: "Basic Screening"
-  },
-  {
-    id: "PL4",
-    title: "DPR Construction Overview",
-    text: "DPR Construction is a multinational engineering company delivering roads, metro, railway, power, mining, manufacturing, and high-rise infrastructure projects worldwide since 1990. HQ in USA, offices in Mumbai BKC, Paris, Dubai, Tokyo, Australia, Mexico. Website: www.dprusa.in.",
-    instruction: "Describe company, global presence since 1990, US HQ, BKC office, and state www.dprusa.in website.",
-    keywords: ["dpr construction", "multinational", "since 1990", "dprusa.in"],
-    section: "About DPR"
-  },
-  {
-    id: "PL5",
-    title: "Applied / Current Status Cases",
-    text: "CASE 1: I see you’ve applied earlier – new openings released under fresh project cycles. Eligible to reapply without cost. / CASE 2: DPR Construction is an industry leader – profile considered for future assignments.",
-    instruction: "Address applicant cases (Case 1 for re-applying, Case 2 for future pool).",
-    keywords: ["applied earlier", "reapply", "industry leader", "future assignments", "apply kiya", "pehle apply"],
-    section: "Cases"
-  },
-  {
-    id: "PL6",
-    title: "Eligibility Verification Questions",
-    text: "Before we proceed, I need to ask you a few quick verification questions: Total years of experience? Are you currently employed? Last organization? Key roles? Department? Education? Graduation year? Certifications? Salary? Expected salary? Interviewed in 6 months? Age? Joining timeline?",
-    instruction: "Ask 13 verification questions to log in system sheet.",
-    keywords: ["verification questions", "years of experience", "currently employed", "graduation", "in-hand salary", "how soon", "sawal", "anubhav", "experience", "salary", "join"],
-    section: "Eligibility Qs"
-  },
-  {
-    id: "PL7",
-    title: "Domestic vs International Opportunities",
-    text: "Would you prefer domestic projects in India or are you open to international roles as well?... currently hiring for major international construction and infrastructure projects in USA, Australia, Singapore, Malaysia, Indonesia, Philippines, Vietnam, UAE, Saudi Arabia, UK, Germany...",
-    instruction: "Check domestic or international interest and list hiring countries.",
-    keywords: ["domestic projects", "international roles", "hiring for major international", "open to international", "domestic", "international", "bharat", "desh", "videsh", "singapore", "dubai", "australia"],
-    section: "Opportunities"
-  },
-  {
-    id: "PL8",
-    title: "Key Benefits & Certification Notes",
-    text: "International Benefits: 100% Salary Hike, work visa, family accommodation, relocation. PC Requirement: expected to either possess or be willing to enrol in relevant professional certifications (OSHA, PMP, Primavera, AutoCAD, QA/QC)... enrol immediately after selection... Failure results in cancellation.",
-    instruction: "Explain package benefits and strict certification compliance/enrolment rules.",
-    keywords: ["salary hike", "work visa", "certification", "osha", "pmp", "primavera", "enrol", "cancellation", "visa", "radd"],
-    section: "Benefits & PC"
-  },
-  {
-    id: "PL9",
-    title: "Shortlist Next Steps & Joining Bonus",
-    text: "Profile submitted to DPR. Response in 2-3 business days if shortlisted. Email resume to contact@naukriedge.com or call 8042364767. Selected candidates eligible for Joining Bonus of approx ₹5,0,000 INR.",
-    instruction: "Provide submission details, Naukri Edge email, contact number, and announce ₹5 Lakhs joining bonus.",
-    keywords: ["submitted to the dpr", "2-3 business days", "naukriedge.com", "joining bonus", "5,0,000", "5 lakhs", "submit", "bonus", "5 lakh", "lakh"],
-    section: "Incentives & Next"
-  },
-  {
-    id: "PL10",
-    title: "Closing & Mandatory Website navigation",
-    text: "It was great speaking with you!... Thank you for your time... NOTE: Associate need to make sure on every call that the Candidate Visit the Website (Project Details, Branch address and Leadership Team details) website navigation is mentioned.",
-    instruction: "Polite sign-off. MUST remind the candidate to visit www.dprusa.in for branch address, project details, and leadership team details.",
-    keywords: ["great speaking", "best in your journey", "visit the website", "dprusa.in", "project details", "branch address", "leadership team", "dhanyawad", "baat karke accha", "website", "leadership"],
-    section: "Closing"
-  }
-];
-
+// Must be defined BEFORE SAMPLE_INITIAL_DATA which calls it
 export const generateRealisticHinglishTranscript = (candidateName, agentName, details = {}) => {
   const exp = details.experience || "8 years";
   const curTitle = details.currentTitle || "Planning Engineer";
@@ -558,3 +156,172 @@ export const generateRealisticHinglishTranscript = (candidateName, agentName, de
     { speaker: "Candidate", time: "04:44", text: `Thank you, goodbye!` }
   ];
 };
+
+const candidateNames = [
+  "Nataraj Krishnan", "Rohan Verma", "Priya Sharma", "Ajay Verma", "Vikramaditya Rao",
+  "Sneha Kulkarni", "Arjun Mehta", "Kavita Reddy", "Rajesh Gupta", "Meera Iyer",
+  "Siddharth Joshi", "Neha Malhotra", "Suresh Nair", "Pooja Deshmukh", "Alok Tripathi",
+  "Deepa Choudhury", "Manoj Saxena", "Swati Pillai", "Varun Bhatia", "Ritu Sen",
+  "Ishaan Kapoor", "Sunita Mishra", "Deepak Prasad", "Anjali Shetty", "Harish Chandra",
+  "Divya Sundaram", "Rohit Agarwal", "Simran Kaur", "Pankaj Yadav", "Tarun Das",
+  "Nisha Menon", "Vivek Nambiar", "Archana Hegde", "Gaurav Panday", "Shweta Rastogi",
+  "Naveen Kumar", "Monali Ghosh", "Kirti Singhania", "Sandeep Bose", "Preeti Solanki",
+  "Yashwardhan Jha", "Vandana Bajaj", "Nitin Roy", "Smita Biswas", "Abhinav Kaushik",
+  "Shruti Patwardhan", "Himanshu Tyagi", "Tanvi Mahajan", "Rameshwar Naik", "Bhavna Parekh"
+];
+
+const agentNames = ["Naukri Vikalp", "Ananya Sharma", "Rahul Verma", "Priya Singh", "Amit Kumar"];
+
+export const SAMPLE_INITIAL_DATA = candidateNames.map((name, i) => {
+  const numStr = String(i + 1).padStart(3, '0');
+  const agent = agentNames[i % agentNames.length];
+  const isFailed = (i % 7 === 1);
+  const isAudited = (i % 2 === 0);
+  
+  return {
+    id: `CALL-2026-0807-${numStr}`,
+    callDate: `08/07/26 ${17 - Math.floor(i / 4)}:${Math.abs(55 - (i * 7) % 60).toString().padStart(2, '0')}`,
+    callerId: `${2498500 + i}`,
+    agentName: agent,
+    agentCode: agent.split(' ')[0].toUpperCase() + '01',
+    campaign: "Naukri Screening",
+    queue: "DPRScreening1",
+    duration: `0:0${3 + (i % 3)}:${(15 + (i * 9) % 45).toString().padStart(2, '0')}`,
+    talkTime: `0:0${3 + (i % 3)}:${(10 + (i * 9) % 45).toString().padStart(2, '0')}`,
+    holdTime: "0:00:05",
+    callType: "Candidate Screening / Job Pitch",
+    disposition: isFailed ? "COMPLIANCE_FAILED" : "INTERESTED_AUDITED",
+    candidateName: name,
+    candidateEmail: `${name.toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
+    campaignStage: isFailed ? "Failed_Review" : "Initial_Screening_Pass",
+    audioUrl: `https://aramcoindia.slashrtc.in/index.php/download/generateLink/recording/dpr-call-${numStr}/play/${9964757500 + i}/2026-08-07/out/false`,
+    audioStatus: "ACTIVE_SLASH_LINK",
+    status: isAudited ? "Audited" : "Pending",
+    overallScore: isAudited ? (isFailed ? 45 : 95 + (i % 6)) : 0,
+    complianceStatus: isAudited ? (isFailed ? "Critical Fail" : "Passed") : "Pending",
+    hasRedFlags: isAudited && isFailed,
+    redFlagsCount: isAudited && isFailed ? 1 : 0,
+    redFlags: isAudited && isFailed ? [
+      {
+        code: "RF_USED_SIR_MAAM",
+        severity: "MEDIUM",
+        title: "Used Formal Title (Sir/Ma'am)",
+        snippet: "Agent addressed candidate as 'Sir' during call introduction."
+      }
+    ] : [],
+    transcript: generateRealisticHinglishTranscript(name, agent, {
+      experience: `${5 + (i % 8)} years`,
+      currentTitle: i % 2 === 0 ? "Planning Engineer" : "Safety Officer",
+      location: i % 3 === 0 ? "Mumbai" : "Pune",
+      expectedSalary: `${8 + (i % 6)} LPA`
+    }),
+    evaluation: isAudited ? {
+      greetingPassed: !isFailed,
+      hrIntroPassed: true,
+      eligibilityPassed: true,
+      companyOverviewPassed: true,
+      screeningQuestionsPassed: true,
+      globalPitchPassed: true,
+      behavioralPassed: true,
+      certificationsPassed: true,
+      joiningBonusPassed: true,
+      websiteRedirectPassed: true,
+      feedback: isFailed ? "Used formal title Sir/Ma'am." : "Excellent compliance. All checkpoints verified."
+    } : null
+  };
+});
+
+
+export const PDF_SCRIPT_LINES = [
+  {
+    id: "PL1",
+    evalKey: "greetingPassed",
+    title: "CP1: Greeting & Candidate Name Verification",
+    summary: "Greet candidate, confirm full name, introduce as Relationship Manager from Naukri.com, and check if good time to connect. AVOID 'Sir/Ma'am'.",
+    instruction: "Avoid 'Sir/Ma'am' honorifics.",
+    keywords: ["speaking with", "relationship manager", "naukri.com", "time to connect", "baat", "samay", "sahi time", "naukri"],
+    prohibited: ["sir", "ma'am", "madam"],
+    section: "Greeting"
+  },
+  {
+    id: "PL2",
+    evalKey: "hrIntroPassed",
+    title: "CP2: Call Purpose & Disclaimers Disclosure",
+    summary: "State job opportunity purpose, disclose call recording, state Naukri never requests fees, and disclaim job offer guarantee.",
+    instruction: "Disclose recording & no upfront fee rule.",
+    keywords: ["opportunity", "recorded", "never asks", "money", "guarantee job", "avsar", "mauka", "record", "paise", "rupay", "guarantee"],
+    section: "Purpose"
+  },
+  {
+    id: "PL3",
+    evalKey: "eligibilityPassed",
+    title: "CP3: Job Switch & Role Confirmation",
+    summary: "Confirm job search status, ask recent & preferred job titles and work locations.",
+    instruction: "Capture recent and preferred job title.",
+    keywords: ["job switch", "new job", "job title", "work location", "naukri badalna", "job change", "location", "position"],
+    section: "Basic Screening"
+  },
+  {
+    id: "PL4",
+    evalKey: "companyOverviewPassed",
+    title: "CP4: DPR Construction Overview Pitch",
+    summary: "Pitch DPR Construction as multinational engineering firm (est. 1990), US HQ, Mumbai BKC office, and encourage visiting www.dprusa.in.",
+    instruction: "Mention est. 1990, US HQ & BKC office.",
+    keywords: ["dpr construction", "multinational", "since 1990", "dprusa.in"],
+    section: "About DPR"
+  },
+  {
+    id: "PL5",
+    evalKey: "screeningQuestionsPassed",
+    title: "CP5: Applicant Status & Cases Resolution",
+    summary: "Address applicant cases (Case 1: re-apply under fresh cycle without cost / Case 2: pooled for future assignments).",
+    instruction: "Clarify no-cost reapplication under new cycle.",
+    keywords: ["applied earlier", "reapply", "industry leader", "future assignments", "apply kiya", "pehle apply"],
+    section: "Cases"
+  },
+  {
+    id: "PL6",
+    evalKey: "globalPitchPassed",
+    title: "CP6: Profile Verification Qs (13 Points)",
+    summary: "Ask 13 verification questions: experience, employment status, last org, department, education, certifications, salary, notice period.",
+    instruction: "Log all 13 verification responses.",
+    keywords: ["verification questions", "years of experience", "currently employed", "graduation", "in-hand salary", "how soon", "sawal", "anubhav", "experience", "salary", "join"],
+    section: "Eligibility Qs"
+  },
+  {
+    id: "PL7",
+    evalKey: "behavioralPassed",
+    title: "CP7: Domestic vs International Roles Pitch",
+    summary: "Check preference for domestic projects (India) vs international projects (USA, Australia, Singapore, Dubai, Saudi Arabia, etc.).",
+    instruction: "Present domestic & global site options.",
+    keywords: ["domestic projects", "international roles", "hiring for major international", "open to international", "domestic", "international", "bharat", "desh", "videsh", "singapore", "dubai", "australia"],
+    section: "Opportunities"
+  },
+  {
+    id: "PL8",
+    evalKey: "certificationsPassed",
+    title: "CP8: Benefits & Mandatory Certifications",
+    summary: "State international perks (100% salary hike, visa, accommodation) & explain mandatory professional certifications (OSHA, PMP, Primavera) enrolment rule.",
+    instruction: "Explain mandatory certification enrolment.",
+    keywords: ["salary hike", "work visa", "certification", "osha", "pmp", "primavera", "enrol", "cancellation", "visa", "radd"],
+    section: "Benefits & PC"
+  },
+  {
+    id: "PL9",
+    evalKey: "joiningBonusPassed",
+    title: "CP9: Submission Steps & ₹5 Lakhs Joining Bonus",
+    summary: "Explain profile submission, resume email to contact@naukriedge.com, contact desk 8042364767, and ₹5,0,000 INR joining bonus.",
+    instruction: "Detail resume email & ₹5 Lakhs joining bonus.",
+    keywords: ["submitted to the dpr", "2-3 business days", "naukriedge.com", "joining bonus", "5,0,000", "5 lakhs", "submit", "bonus", "5 lakh", "lakh"],
+    section: "Incentives & Next"
+  },
+  {
+    id: "PL10",
+    evalKey: "websiteRedirectPassed",
+    title: "CP10: Closing & Mandatory Website Redirect",
+    summary: "Provide polite sign-off & explicitly instruct candidate to visit www.dprusa.in for branch address, project details & leadership team.",
+    instruction: "Mandatory instruction to visit www.dprusa.in.",
+    keywords: ["great speaking", "best in your journey", "visit the website", "dprusa.in", "project details", "branch address", "leadership team", "dhanyawad", "baat karke accha", "website", "leadership"],
+    section: "Closing"
+  }
+];

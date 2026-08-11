@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { UploadCloud, Check, AlertCircle, Sparkles, X, Database } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-// generateRealisticHinglishTranscript import removed to keep audits 100% real
 
 export default function BatchUploader({ onImportData, onClose, sampleInitialRow }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -226,18 +225,6 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
         }
       };
 
-      const details = {
-        experience: getRowField(['experience', 'exp', 'years']),
-        currentTitle: getRowField(['title', 'role', 'designation', 'jobTitle']),
-        location: getRowField(['location', 'city', 'address']),
-        expectedSalary: getRowField(['expected', 'salary', 'lpa'])
-      };
-
-      // Preload a professional realistic transcript mapped to candidate details
-      // Initially, the transcript is empty (not audited yet) to keep it 100% real and prevent fake transcripts
-      const transcript = [];
-
-      // Store all raw columns dynamically as strings to prevent React child rendering errors
       const rawFields = {};
       if (isArray) {
         headerRow.forEach((hCol, hIdx) => {
@@ -287,7 +274,7 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
         hasRedFlags: false,
         redFlagsCount: 0,
         redFlags: [],
-        transcript,
+        transcript: [],
         rawFields
       });
     });
@@ -308,24 +295,24 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="bg-[var(--bg-card-solid)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl max-w-xl w-full p-6 relative modal-content transition-colors">
+    <div className="modal-backdrop select-none">
+      <div className="bg-white text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-xl max-w-xl w-full p-8 relative modal-content text-left">
         
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--bg-card-subtle)] transition-colors"
+          className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold">
+        <div className="flex items-center gap-4 mb-7">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center">
             <Database className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-extrabold text-[var(--text-primary)] text-lg">Batch Excel/CSV Ingestion</h3>
-            <p className="text-xs text-[var(--text-secondary)] font-medium">Supports 50,000 to 60,000 input rows with automatic column mapping</p>
+            <h3 className="font-semibold text-[var(--text-primary)] text-base">Batch Excel / CSV Ingestion</h3>
+            <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Supports large records with automatic column parsing</p>
           </div>
         </div>
 
@@ -334,19 +321,19 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+          className={`border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer ${
             isDragging
-              ? 'border-blue-500 bg-blue-500/10 shadow-inner'
-              : 'border-[var(--border-color)] hover:border-[var(--border-hover)] bg-[var(--bg-card-subtle)]/40 hover:bg-[var(--bg-card-subtle)]/60'
+              ? 'border-indigo-400 bg-indigo-50'
+              : 'border-gray-200 hover:border-indigo-300 bg-gray-50 hover:bg-indigo-50/40'
           }`}
         >
-          <div className="w-12 h-12 rounded-full bg-[var(--bg-card-solid)] border border-[var(--border-color)] shadow-2xs text-blue-500 flex items-center justify-center mx-auto mb-3 transition-transform duration-300 hover:scale-105">
-            <UploadCloud className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-xl bg-white border border-gray-200 shadow-sm text-indigo-500 flex items-center justify-center mx-auto mb-4">
+            <UploadCloud className="w-6 h-6 animate-bounce" />
           </div>
-          <h4 className="font-bold text-[var(--text-primary)] text-sm">Drag and drop your Excel or CSV dataset here</h4>
-          <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-snug font-medium">Supports .XLSX, .XLS, or .CSV formatted reports from SlashRTC</p>
+          <h4 className="font-semibold text-[var(--text-primary)] text-sm">Drag and drop your spreadsheet here</h4>
+          <p className="text-[13px] text-[var(--text-muted)] mt-1.5 leading-relaxed">Supports .XLSX, .XLS, or .CSV from SlashRTC</p>
           
-          <label className="mt-4 inline-flex btn-primary text-xs py-2 px-4 cursor-pointer">
+          <label className="mt-5 inline-flex btn-primary text-sm py-2 px-5 cursor-pointer">
             <span>Browse Files</span>
             <input
               type="file"
@@ -359,39 +346,39 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
 
         {/* Loading Spinner */}
         {loading && (
-          <div className="mt-4 p-3.5 bg-blue-500/10 border border-blue-500/20 text-blue-600 rounded-xl text-xs font-semibold flex items-center gap-2.5 shadow-2xs">
+          <div className="mt-4 p-4 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl text-[13px] font-medium flex items-center gap-2.5">
             <Sparkles className="w-4 h-4 animate-spin shrink-0" />
-            <span>Parsing 50,000+ data rows & mapping SlashRTC recording links...</span>
+            <span>Parsing data rows & mapping SlashRTC recording links...</span>
           </div>
         )}
 
         {/* Error message */}
         {errorMsg && (
-          <div className="mt-4 p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 rounded-xl text-xs font-semibold flex items-center gap-2.5 shadow-2xs">
-            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 animate-bounce" />
+          <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-[13px] font-medium flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {/* Success count */}
         {importedCount !== null && (
-          <div className="mt-4 p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 rounded-xl text-xs font-semibold flex items-center gap-2.5 shadow-2xs">
-            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span>Successfully imported {importedCount.toLocaleString()} call records into AI Audit Pipeline!</span>
+          <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-[13px] font-semibold flex items-center gap-2.5 font-mono">
+            <Check className="w-4 h-4 shrink-0" />
+            <span>Ingested {importedCount.toLocaleString()} calls into AI pipeline!</span>
           </div>
         )}
 
         {/* Quick sample loader footer */}
-        <div className="mt-6 pt-4 border-t border-[var(--border-color)] flex items-center justify-between">
-          <span className="text-xs text-[var(--text-secondary)] font-medium">Need to test sample SlashRTC row?</span>
+        <div className="mt-6 pt-5 border-t border-[var(--border-color)] flex items-center justify-between">
+          <span className="text-[13px] text-[var(--text-muted)]">Need to test a sample call record?</span>
           <button
             onClick={() => {
               onImportData(sampleInitialRow);
               onClose();
             }}
-            className="btn-secondary text-xs py-1.5 px-3 border-blue-500/20 text-blue-600 hover:bg-blue-500/10 font-bold transition-all duration-200"
+            className="btn-secondary text-[13px] py-1.5 px-4 text-indigo-600 hover:bg-indigo-50 border-indigo-200"
           >
-            Load User Sample Row
+            Load Sample Row
           </button>
         </div>
 
@@ -399,3 +386,5 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
     </div>
   );
 }
+
+
