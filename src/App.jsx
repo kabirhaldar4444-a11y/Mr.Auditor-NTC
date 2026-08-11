@@ -134,6 +134,10 @@ const callOpenAiApi = async (apiKey, messages, retriesLeft = 3) => {
         const errJson = JSON.parse(errText);
         errMsg = errJson.error?.message || errMsg;
       } catch (_) {}
+      if (response.status === 401 || errMsg.toLowerCase().includes('incorrect api key') || errMsg.toLowerCase().includes('invalid api key')) {
+        localStorage.removeItem('openai_api_key');
+        errMsg = "Invalid or revoked OpenAI API Key. Please enter a valid API key in Settings or add OPENAI_API_KEY in Vercel Environment Variables.";
+      }
       throw new Error(errMsg);
     }
 
@@ -175,9 +179,15 @@ export default function App() {
   // Settings & Session State
   const [slashRtcActive, setSlashRtcActive] = useState(true);
   const [apiKey, setApiKey] = useState(() => {
-    // Priority: Vite build-time env (from Vercel/local .env) → localStorage (saved from Settings)
     const envKey = import.meta.env.VITE_OPENAI_API_KEY;
-    const savedKey = localStorage.getItem('openai_api_key');
+    let savedKey = localStorage.getItem('openai_api_key');
+    
+    // Auto-clear revoked key if still saved in browser localStorage
+    if (savedKey && (savedKey.includes('ptNx5JdZS') || savedKey.includes('FJ30UkWZfZj'))) {
+      localStorage.removeItem('openai_api_key');
+      savedKey = null;
+    }
+    
     const resolved = envKey || savedKey || '';
     if (resolved && resolved !== savedKey) {
       localStorage.setItem('openai_api_key', resolved);
@@ -185,9 +195,11 @@ export default function App() {
     return resolved;
   });
 
-  // Persist apiKey to localStorage whenever user updates it in Settings
+  // Persist valid apiKey to localStorage whenever user updates it in Settings
   useEffect(() => {
-    if (apiKey) localStorage.setItem('openai_api_key', apiKey);
+    if (apiKey && !apiKey.includes('ptNx5JdZS')) {
+      localStorage.setItem('openai_api_key', apiKey);
+    }
   }, [apiKey]);
 
   // SlashRTC credential form bindings inside Settings view
