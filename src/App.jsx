@@ -179,7 +179,7 @@ export default function App() {
   // Settings & Session State
   const [slashRtcActive, setSlashRtcActive] = useState(true);
   const [apiKey, setApiKey] = useState(() => {
-    const envKey = import.meta.env.VITE_OPENAI_API_KEY;
+    const envKey = import.meta.env.VITE_OPENAI_API_KEY || import.meta.env.OPENAI_API_KEY;
     let savedKey = localStorage.getItem('openai_api_key');
     
     // Auto-clear revoked key if still saved in browser localStorage
