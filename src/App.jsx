@@ -175,22 +175,19 @@ export default function App() {
   // Settings & Session State
   const [slashRtcActive, setSlashRtcActive] = useState(true);
   const [apiKey, setApiKey] = useState(() => {
-    // Priority: .env variable → localStorage → hardcoded default
+    // Priority: Vite build-time env (from Vercel/local .env) → localStorage (saved from Settings)
     const envKey = import.meta.env.VITE_OPENAI_API_KEY;
     const savedKey = localStorage.getItem('openai_api_key');
-    const hardcodedKey = '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';
-    const resolvedKey = envKey || savedKey || hardcodedKey;
-    if (resolvedKey && resolvedKey !== savedKey) {
-      localStorage.setItem('openai_api_key', resolvedKey);
+    const resolved = envKey || savedKey || '';
+    if (resolved && resolved !== savedKey) {
+      localStorage.setItem('openai_api_key', resolved);
     }
-    return resolvedKey;
+    return resolved;
   });
 
-  // Persist apiKey to localStorage whenever it changes (e.g. user updates it in Settings)
+  // Persist apiKey to localStorage whenever user updates it in Settings
   useEffect(() => {
-    if (apiKey) {
-      localStorage.setItem('openai_api_key', apiKey);
-    }
+    if (apiKey) localStorage.setItem('openai_api_key', apiKey);
   }, [apiKey]);
 
   // SlashRTC credential form bindings inside Settings view

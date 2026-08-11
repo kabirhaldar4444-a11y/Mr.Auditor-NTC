@@ -6,8 +6,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
   if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
-  const hardcodedKey = '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';
-  const apiKey = req.headers['x-api-key'] || process.env.VITE_OPENAI_API_KEY || hardcodedKey;
+  const apiKey = req.headers['x-api-key'] || process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
