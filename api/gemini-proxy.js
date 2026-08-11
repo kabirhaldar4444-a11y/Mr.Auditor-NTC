@@ -14,7 +14,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  const apiKey = req.headers['x-api-key'] || process.env.VITE_OPENAI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  const hardcodedKey = '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';
+  const apiKey = req.headers['x-api-key'] || process.env.VITE_OPENAI_API_KEY || process.env.VITE_GEMINI_API_KEY || hardcodedKey;
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;

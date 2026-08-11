@@ -175,13 +175,13 @@ export default function App() {
   // Settings & Session State
   const [slashRtcActive, setSlashRtcActive] = useState(true);
   const [apiKey, setApiKey] = useState(() => {
-    // Priority: .env variable → localStorage → empty
+    // Priority: .env variable → localStorage → hardcoded default
     const envKey = import.meta.env.VITE_OPENAI_API_KEY;
     const savedKey = localStorage.getItem('openai_api_key');
-    const resolvedKey = envKey || savedKey || '';
-    // If env has a key, always persist it to localStorage so other sessions pick it up
-    if (envKey && envKey !== savedKey) {
-      localStorage.setItem('openai_api_key', envKey);
+    const hardcodedKey = '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';
+    const resolvedKey = envKey || savedKey || hardcodedKey;
+    if (resolvedKey && resolvedKey !== savedKey) {
+      localStorage.setItem('openai_api_key', resolvedKey);
     }
     return resolvedKey;
   });

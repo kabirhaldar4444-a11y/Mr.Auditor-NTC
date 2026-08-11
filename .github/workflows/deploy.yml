@@ -31,8 +31,8 @@ jobs:
         run: npm ci
 
       - name: Build
-        # Inject the GitHub Secret as the Vite env variable at build time
-        # Vite replaces import.meta.env.VITE_OPENAI_API_KEY in the built bundle
+        # If GitHub Secret is set, it overrides the hardcoded default in the code.
+        # If not set, the app still works via the hardcoded fallback key.
         env:
           VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
         run: npm run build
