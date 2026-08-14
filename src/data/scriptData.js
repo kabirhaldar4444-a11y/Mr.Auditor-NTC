@@ -151,11 +151,21 @@ export const generateRealisticHinglishTranscript = (candidateName, agentName, de
     { speaker: "Agent", time: "03:22", text: `Yes! Benefits mein aapko PF, medical insurance, relocation support aur bonus milega. Lekin dhyan rakhiyega ki technical standards ke liye certifications jaise PMP, AutoCAD, Primavera P6, or Revit mandatory hain. Agar aapke paas nahi hain, toh selection ke baad aapko immediately enroll karna hoga, nahi toh job offer cancel ho sakta hai.` },
     { speaker: "Candidate", time: "03:52", text: `Mere paas certifications hain, main submit kar dunga.` },
     { speaker: "Agent", time: "03:58", text: `Perfect! Selected candidates ko 10% sign-on joining bonus bhi milega agar 30 days mein join karte hain. Aur please make sure ki aap www.dprusa.in website par jaakar project details aur branch address zaroor check karein.` },
-    { speaker: "Candidate", time: "04:30", text: `Sure, main check kar lunga. Thank you.` },
+    { speaker: "Candidate", time: "04:30", text: `Sure, main check karunga. Thank you.` },
     { speaker: "Agent", time: "04:38", text: `Dhanyawad, wish you all the best! Have a great day!` },
     { speaker: "Candidate", time: "04:44", text: `Thank you, goodbye!` }
   ];
 };
+
+// Sanitizes call object for real production data without injecting mock text
+export const sanitizeCallRecord = (call) => {
+  if (!call) return call;
+
+  // Preserve real transcript 100% without mock overrides
+  return call;
+};
+
+
 
 const candidateNames = [
   "Nataraj Krishnan", "Rohan Verma", "Priya Sharma", "Ajay Verma", "Vikramaditya Rao",

@@ -3,11 +3,12 @@ import { Phone, CheckCircle2, ShieldAlert, Cpu, Zap, Activity } from 'lucide-rea
 
 export default function StatsOverview({ calls, onRunBatchAudit, isAuditingBatch }) {
   const totalCalls = calls.length;
+  const auditedCallsWithScore = calls.filter(c => c.status === 'Audited' && c.overallScore !== null && c.overallScore !== undefined);
   const auditedCalls = calls.filter(c => c.status === 'Audited').length;
-  const pendingCalls = totalCalls - auditedCalls;
+  const pendingCalls = calls.filter(c => c.status !== 'Audited' && c.complianceStatus !== 'Unanswered').length;
   
-  const avgScore = auditedCalls > 0
-    ? Math.round(calls.filter(c => c.status === 'Audited').reduce((acc, curr) => acc + (curr.overallScore || 0), 0) / auditedCalls)
+  const avgScore = auditedCallsWithScore.length > 0
+    ? Math.round(auditedCallsWithScore.reduce((acc, curr) => acc + curr.overallScore, 0) / auditedCallsWithScore.length)
     : 0;
 
   const passedCalls = calls.filter(c => c.complianceStatus === 'Passed').length;

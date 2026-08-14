@@ -1,38 +1,94 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import crypto from 'crypto'
 
 let cachedCookie = '';
-const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
 
 async function performLogin(username, password, portalUrl) {
   const portalOrigin = new URL(portalUrl).origin;
-  console.log(`Logging into SlashRTC portal (${portalOrigin}) as ${username}...`);
+  const loginPageUrl = `${portalOrigin}/index.php/login`;
+  const validateUrl = `${portalOrigin}/index.php/login/validate`;
+
+  console.log(`[vite-proxy] Initiating RSA-encrypted SlashRTC login for user '${username}' at ${portalOrigin}...`);
+
+  // Step 1: Initial GET to /login page to receive initial session cookie & RSA public key
+  const initialRes = await fetch(loginPageUrl, {
+    headers: { 'User-Agent': ua }
+  });
+  const html = await initialRes.text();
+
+  const initialSetCookies = typeof initialRes.headers.getSetCookie === 'function'
+    ? initialRes.headers.getSetCookie()
+    : (initialRes.headers.get('set-cookie') ? [initialRes.headers.get('set-cookie')] : []);
+
+  const ciCookieStr = initialSetCookies.find(c => c && c.includes('ci_session2='));
+  const initialCookieHeader = ciCookieStr ? ciCookieStr.split(';')[0] : '';
+
+  // Extract RSA public key from login page HTML
+  const match = html.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/);
+  let finalPassword = password;
+  if (match) {
+    const publicKeyPem = match[0];
+    const encryptedBuf = crypto.publicEncrypt(
+      { key: publicKeyPem, padding: crypto.constants.RSA_PKCS1_PADDING },
+      Buffer.from(password, 'utf8')
+    );
+    finalPassword = encryptedBuf.toString('base64');
+    console.log('[vite-proxy] Password encrypted with RSA public key successfully.');
+  }
+
+  // Step 2: POST credentials with RSA encrypted password
   const loginForm = new URLSearchParams();
   loginForm.append('username', username);
-  loginForm.append('password', password);
+  loginForm.append('password', finalPassword);
 
-  const loginResponse = await fetch(`${portalOrigin}/index.php/login/validate`, {
+  const loginResponse = await fetch(validateUrl, {
     method: 'POST',
     body: loginForm,
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': ua
+      'User-Agent': ua,
+      'Cookie': initialCookieHeader,
+      'Referer': loginPageUrl,
+      'Origin': portalOrigin
     },
     redirect: 'manual'
   });
 
-  const setCookies = loginResponse.headers.getSetCookie();
-  const validCookies = setCookies.filter(c => c.startsWith('ci_session2=') && !c.includes('expires='));
-  const finalCookie = validCookies[validCookies.length - 1];
-  
-  if (finalCookie) {
-    cachedCookie = finalCookie.split(';')[0];
-    console.log("SlashRTC session established successfully!");
+  const loginText = await loginResponse.text();
+  if (loginText.includes('alerterror') || loginText.includes('Incorrect') || loginText.includes('Username or Password')) {
+    cachedCookie = '';
+    throw new Error('SlashRTC login failed: Incorrect username or password.');
+  }
+
+  const authSetCookies = typeof loginResponse.headers.getSetCookie === 'function'
+    ? loginResponse.headers.getSetCookie()
+    : (loginResponse.headers.get('set-cookie') ? [loginResponse.headers.get('set-cookie')] : []);
+
+  const validCookies = authSetCookies.filter(c => c && c.includes('ci_session2=') && !c.includes('expires='));
+  const finalCookieHeader = validCookies.length > 0 ? validCookies[validCookies.length - 1].split(';')[0] : initialCookieHeader;
+
+  if (finalCookieHeader) {
+    cachedCookie = finalCookieHeader;
+    console.log('[vite-proxy] SlashRTC session established automatically!');
     return cachedCookie;
   } else {
-    throw new Error("Could not find session cookie in login response");
+    throw new Error('Could not obtain session cookie from SlashRTC login.');
   }
+}
+
+async function fetchAudioWithCookie(audioUrl, cookieHeader, portalUrl) {
+  const portalOrigin = new URL(portalUrl).origin;
+  return await fetch(audioUrl, {
+    headers: {
+      'Cookie': cookieHeader,
+      'User-Agent': ua,
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': `${portalOrigin}/index.php/site/viewcampaign`
+    }
+  });
 }
 
 // https://vite.dev/config/
@@ -44,6 +100,45 @@ export default defineConfig({
       name: 'slashrtc-audio-proxy',
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
+          if (req.url.startsWith('/api/transcribe-call')) {
+            try {
+              const transcribeCallModule = await import('./api/transcribe-call.js');
+              let bodyText = '';
+              req.on('data', chunk => { bodyText += chunk; });
+              req.on('end', async () => {
+                let parsedBody = {};
+                try { parsedBody = JSON.parse(bodyText); } catch (_) {}
+                req.body = parsedBody;
+                
+                // Polyfill status method for Express-like response
+                res.status = (code) => {
+                  res.statusCode = code;
+                  return {
+                    json: (data) => {
+                      res.setHeader('Content-Type', 'application/json');
+                      res.end(JSON.stringify(data));
+                    },
+                    send: (data) => {
+                      if (typeof data === 'object') {
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(JSON.stringify(data));
+                      } else {
+                        res.end(data);
+                      }
+                    }
+                  };
+                };
+
+                await transcribeCallModule.default(req, res);
+              });
+            } catch (err) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ status: 'TRANSCRIPTION_FAILED', error: err.message }));
+            }
+            return;
+          }
+
           if (req.url.startsWith('/api/openai-proxy')) {
             try {
               let bodyText = '';
@@ -110,6 +205,7 @@ export default defineConfig({
             const usernameParam = urlObj.searchParams.get('username') || 'SupportEngineer';
             const passwordParam = urlObj.searchParams.get('password') || 'Enginer#321';
             const portalUrlParam = urlObj.searchParams.get('portalUrl') || 'https://aramcoindia.slashrtc.in/index.php/report/dashboardView?1=1';
+            const sessionCookieParam = urlObj.searchParams.get('sessionCookie') || '';
             
             if (!audioUrl) {
               res.statusCode = 400;
@@ -117,60 +213,76 @@ export default defineConfig({
               return;
             }
 
+            if (sessionCookieParam && sessionCookieParam.trim()) {
+              const trimmed = sessionCookieParam.trim();
+              cachedCookie = trimmed.includes('=') ? trimmed : `ci_session2=${trimmed}`;
+            }
+
             try {
-              // 1. Perform login in background if we don't have cookies yet
+              let audioResponse = null;
+
               if (!cachedCookie) {
-                await performLogin(usernameParam, passwordParam, portalUrlParam);
-              }
-
-              // 2. Fetch the audio file using the session cookies
-              console.log(`Proxying audio request for: ${audioUrl}`);
-              let audioResponse = await fetch(audioUrl, {
-                headers: {
-                  'Cookie': cachedCookie,
-                  'User-Agent': ua
+                try {
+                  await performLogin(usernameParam, passwordParam, portalUrlParam);
+                } catch (loginErr) {
+                  console.warn(`[vite-proxy] Login failed: ${loginErr.message}`);
                 }
-              });
+              }
 
-              // Check if session expired or redirect is issued
-              const isHtml = (audioResponse.headers.get('content-type') || '').includes('text/html');
-              const isRedirect = audioResponse.headers.get('refresh') || audioResponse.status === 302;
-              
-              if (isHtml || isRedirect) {
-                console.log("Session expired or redirected. Re-logging in...");
-                await performLogin(usernameParam, passwordParam, portalUrlParam);
-                
-                // Retry request
-                audioResponse = await fetch(audioUrl, {
-                  headers: {
-                    'Cookie': cachedCookie,
-                    'User-Agent': ua
+              if (cachedCookie) {
+                console.log(`[vite-proxy] Fetching audio via AJAX with SlashRTC session cookie: ${audioUrl}`);
+                audioResponse = await fetchAudioWithCookie(audioUrl, cachedCookie, portalUrlParam);
+              }
+
+              let ct = (audioResponse ? (audioResponse.headers.get('content-type') || '') : '').toLowerCase();
+              let isHtml = ct.includes('text/html');
+
+              if (!audioResponse || !audioResponse.ok || isHtml) {
+                console.log("[vite-proxy] Session expired or returned HTML. Re-logging in automatically...");
+                cachedCookie = '';
+                try {
+                  await performLogin(usernameParam, passwordParam, portalUrlParam);
+                  audioResponse = await fetchAudioWithCookie(audioUrl, cachedCookie, portalUrlParam);
+                } catch (reloginErr) {
+                  console.warn(`[vite-proxy] Re-login failed: ${reloginErr.message}`);
+                }
+              }
+
+              if (!audioResponse || !audioResponse.ok) {
+                res.statusCode = 401;
+                res.end(`SlashRTC Auth Error: SlashRTC login failed for '${usernameParam}' at ${portalUrlParam}. Check Username & Password in Settings.`);
+                return;
+              }
+
+              const arrayBuffer = await audioResponse.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+
+              if (buffer.length < 100) {
+                console.log("[vite-proxy] Buffer < 100 bytes (session expired). Re-authenticating via RSA...");
+                cachedCookie = '';
+                try {
+                  await performLogin(usernameParam, passwordParam, portalUrlParam);
+                  const retryRes = await fetchAudioWithCookie(audioUrl, cachedCookie, portalUrlParam);
+                  const retryBuf = Buffer.from(await retryRes.arrayBuffer());
+                  if (retryBuf.length >= 100) {
+                    const finalCt = retryRes.headers.get('content-type') || 'audio/mpeg';
+                    res.setHeader('Content-Type', finalCt);
+                    res.setHeader('Content-Length', retryBuf.length);
+                    res.end(retryBuf);
+                    return;
                   }
-                });
+                } catch (_) {}
+
+                res.statusCode = 401;
+                res.end("SlashRTC Auth Error: Unable to fetch audio recording from SlashRTC.");
+                return;
               }
 
-              // Forward response headers
-              res.setHeader('Content-Type', audioResponse.headers.get('Content-Type') || 'audio/x-wav');
-              if (audioResponse.headers.get('Content-Length')) {
-                res.setHeader('Content-Length', audioResponse.headers.get('Content-Length'));
-              }
+              const finalCt = audioResponse.headers.get('content-type') || 'audio/mpeg';
+              res.setHeader('Content-Type', finalCt);
+              res.setHeader('Content-Length', buffer.length);
               res.setHeader('Accept-Ranges', 'bytes');
-
-              // Stream response body back to browser
-              if (audioResponse.body) {
-                const reader = audioResponse.body.getReader();
-                const stream = async () => {
-                  while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    res.write(value);
-                  }
-                  res.end();
-                };
-                await stream();
-              } else {
-                res.end();
-              }
+              res.end(buffer);
 
             } catch (error) {
               console.error("Audio proxy failed:", error);

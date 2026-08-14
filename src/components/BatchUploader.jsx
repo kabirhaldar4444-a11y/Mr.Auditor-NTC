@@ -144,7 +144,7 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
       const callerId = isArray ? (row[leadIdIdx] || '') : (row['LEAD ID'] || row['Call ID'] || '');
       const agentName = isArray ? (row[agentFullNameIdx] || 'Agent') : (row['AGENT FULL NAME'] || row['Agent'] || 'Agent');
       const agentCode = isArray ? (row[agentNameIdx] || '') : (row['AGENT NAME'] || row['Agent Code'] || '');
-      const campaign = isArray ? (row[campaignIdx] || '') : (row['CAMPAIGN'] || '');
+      const campaign = isArray ? (row[campaignIdx] || '') : (row['CAMPAIGN'] || row['Campaign'] || row['CAMPAIGN NAME'] || row['CAMPAIGN_NAME'] || row['PROCESS'] || row['Process'] || 'General');
       const queue = isArray ? (row[processIdx] || '') : (row['PROCESS'] || '');
       const duration = isArray ? (row[callTimeIdx] || '0:00:00') : (row['CALL TIME'] || row['Duration'] || '0:00:00');
       const talkTime = isArray ? (row[talkTimeIdx] || '0:00:00') : (row['TALKTIME'] || row['Talk Time'] || '0:00:00');
@@ -206,13 +206,35 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
           }
         }
       } else {
-        candidateName = row['name'] || row['CandidateName'] || 'Nataraj';
-        candidateEmail = row['email'] || row['CandidateEmail'] || 'natarajgg123@gmail.com';
+        candidateName = row['name'] || row['CandidateName'] || row['CUSTOMER NAME'] || row['CANDIDATE NAME'] || '';
+        candidateEmail = row['email'] || row['CandidateEmail'] || row['CUSTOMER EMAIL'] || row['CANDIDATE EMAIL'] || '';
         campaignStage = row['jobTitle'] || row['leadsetName'] || '';
       }
 
-      if (!candidateName || candidateName === '--') candidateName = 'Nataraj';
-      if (!candidateEmail || candidateEmail === '--') candidateEmail = 'natarajgg123@gmail.com';
+      if (!candidateName || candidateName === '--' || candidateName === 'Nataraj') {
+        if (isArray) {
+          for (let i = 0; i < row.length; i++) {
+            const h = headerRow[i] ? String(headerRow[i]).toUpperCase() : '';
+            const val = row[i] ? String(row[i]).trim() : '';
+            if (val && val !== '--' && (h.includes('CANDIDATE') || h.includes('CUSTOMER') || h.includes('APPLICANT') || h.includes('NAME'))) {
+              if (!val.includes('@') && !val.includes('http') && !val.includes('NTC') && val.length > 2) {
+                candidateName = val;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if ((!candidateName || candidateName === '--' || candidateName === 'Nataraj') && candidateEmail && candidateEmail.includes('@')) {
+        const emailPrefix = candidateEmail.split('@')[0].replace(/[\._\d]/g, ' ').trim();
+        if (emailPrefix.length > 2 && !emailPrefix.toLowerCase().includes('nataraj')) {
+          candidateName = emailPrefix.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        }
+      }
+
+      if (!candidateName || candidateName === '--') candidateName = 'Candidate';
+      if (!candidateEmail || candidateEmail === '--') candidateEmail = '';
 
       // Find candidate details from row dynamically
       const getRowField = (keys) => {
@@ -274,7 +296,7 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
         hasRedFlags: false,
         redFlagsCount: 0,
         redFlags: [],
-        transcript: [],
+        transcript: null,
         rawFields
       });
     });

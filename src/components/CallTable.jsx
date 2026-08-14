@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Play, ShieldAlert, CheckCircle2, Clock, Sparkles, ChevronLeft, ChevronRight, FileSpreadsheet, Eye, Trash2, Zap, SlidersHorizontal, Filter, Check, X } from 'lucide-react';
+import { Search, Play, ShieldAlert, CheckCircle2, Clock, Sparkles, ChevronLeft, ChevronRight, FileSpreadsheet, Eye, Trash2, Zap, SlidersHorizontal, Filter, Check, X, PhoneOff, VolumeX, AlertCircle, Calendar } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   'DATE-TIME',
@@ -51,11 +51,33 @@ const COLUMN_MAPPING = {
 };
 
 const getCellValue = (call, colName) => {
-  if (call.rawFields && call.rawFields[colName] !== undefined) {
-    return call.rawFields[colName];
+  const normCol = String(colName).toUpperCase().trim();
+  
+  if (normCol === 'NAME' || normCol === 'CANDIDATE NAME' || normCol === 'CANDIDATENAME') {
+    const rawVal = call.rawFields ? (call.rawFields['NAME'] || call.rawFields['CANDIDATE NAME'] || call.rawFields['CANDIDATENAME']) : '';
+    if (rawVal && String(rawVal).trim() !== '' && String(rawVal).trim() !== '--') {
+      return String(rawVal).trim();
+    }
+    return call.candidateName || rawVal || '--';
   }
+
+  if (normCol === 'AGENT FULL NAME' || normCol === 'AGENT NAME' || normCol === 'AGENT') {
+    const rawVal = call.rawFields ? (call.rawFields['AGENT FULL NAME'] || call.rawFields['AGENT NAME']) : '';
+    if (rawVal && String(rawVal).trim() !== '' && String(rawVal).trim() !== '--') {
+      return String(rawVal).trim();
+    }
+    return call.agentName || rawVal || '--';
+  }
+
+  if (call.rawFields && call.rawFields[colName] !== undefined) {
+    const rawVal = call.rawFields[colName];
+    if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== '' && String(rawVal).trim() !== '--') {
+      return rawVal;
+    }
+  }
+
   const camelKey = COLUMN_MAPPING[colName] || colName;
-  return call[camelKey];
+  return call[camelKey] || (call.rawFields ? call.rawFields[colName] : '--');
 };
 
 const getNormalizedDateString = (dateStr) => {
@@ -97,7 +119,27 @@ const getNormalizedDateString = (dateStr) => {
   return '';
 };
 
-export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAuditingId, onDeleteCalls, initialAgentFilter = 'ALL', onOpenUpload, onRunBatchAudit }) {
+const parseDurationSeconds = (durationStr) => {
+  if (!durationStr) return 0;
+  const str = String(durationStr).trim();
+  const parts = str.split(':');
+  if (parts.length === 3) {
+    return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseInt(parts[2], 10);
+  } else if (parts.length === 2) {
+    return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  }
+  const num = parseInt(str, 10);
+  return isNaN(num) ? 0 : num;
+};
+
+const parseCallDateTimestamp = (call) => {
+  const dStr = call.callDate || (call.rawFields && (call.rawFields['DATE-TIME'] || call.rawFields['Date']));
+  if (!dStr) return 0;
+  const t = new Date(dStr).getTime();
+  return isNaN(t) ? 0 : t;
+};
+
+export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAuditingId, onDeleteCalls, initialAgentFilter = 'ALL', onOpenUpload, onRunBatchAudit, onClearDemoData }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [agentFilter, setAgentFilter] = useState(initialAgentFilter);
@@ -105,6 +147,18 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [pageSize, setPageSize] = useState(50);
   const [dateFilter, setDateFilter] = useState('');
+
+  // Smart Sorting State ('date_desc', 'date_asc', 'talk_desc', 'talk_asc', 'score_desc', 'score_asc')
+  const [sortOption, setSortOption] = useState('date_desc');
+
+  // Smart Duration Filter State ('ALL', 'LONG', 'MEDIUM', 'SHORT', 'UNANSWERED')
+  const [durationFilter, setDurationFilter] = useState('ALL');
+
+  // Smart Date Filter State ('ALL', 'TODAY', 'YESTERDAY', 'LAST_7', 'THIS_MONTH', 'CUSTOM')
+  const [datePreset, setDatePreset] = useState('ALL');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [showDatePopover, setShowDatePopover] = useState(false);
 
   // Dynamic Column Selector States
   const [visibleColumns, setVisibleColumns] = useState(() => new Set(DEFAULT_COLUMNS));
@@ -179,44 +233,92 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
     return Object.entries(values).map(([val, count]) => ({ val, count })).sort((a, b) => b.count - a.count);
   }, [calls, openFilterColumn]);
 
-  // Filtered dataset with smart multi-column scanning search
+  // Filtered dataset with smart multi-column scanning search, duration, and smart date presets
   const filteredCalls = useMemo(() => {
     return calls.filter(call => {
       let matchSearch = true;
       if (searchTerm) {
-        const query = searchTerm.toLowerCase();
-        if (call.rawFields) {
-          matchSearch = Object.values(call.rawFields).some(val => 
-            val && String(val).toLowerCase().includes(query)
-          );
-        } else {
-          matchSearch = 
-            (call.candidateName && call.candidateName.toLowerCase().includes(query)) ||
-            (call.candidateEmail && call.candidateEmail.toLowerCase().includes(query)) ||
-            (call.agentName && call.agentName.toLowerCase().includes(query)) ||
-            (call.id && call.id.toLowerCase().includes(query)) ||
-            (call.callerId && call.callerId.includes(query));
+        // Clean copy-paste whitespace, non-breaking spaces (\u00A0), tabs, newlines
+        const cleanQuery = searchTerm.replace(/[\u00A0\t\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (cleanQuery.length > 0) {
+          const queryWords = cleanQuery.split(' ').filter(Boolean);
+
+          // Get searchable haystack text for this record
+          const rawValues = call.rawFields ? Object.values(call.rawFields).join(' ') : '';
+          const fullRecordHaystack = [
+            call.id || '',
+            call.callerId || '',
+            call.agentName || '',
+            call.candidateName || '',
+            call.candidateEmail || '',
+            call.campaign || '',
+            call.disposition || '',
+            rawValues
+          ].join(' ').toLowerCase();
+
+          // Every word in the query must be found somewhere in the record haystack
+          matchSearch = queryWords.every(word => fullRecordHaystack.includes(word));
         }
       }
 
       const matchStatus = 
         statusFilter === 'ALL' ||
-        (statusFilter === 'AUDITED' && call.status === 'Audited') ||
-        (statusFilter === 'PENDING' && call.status !== 'Audited') ||
+        (statusFilter === 'AUDITED' && call.status === 'Audited' && call.overallScore !== null) ||
+        (statusFilter === 'PENDING' && call.status !== 'Audited' && call.complianceStatus !== 'Unanswered') ||
         (statusFilter === 'PASSED' && call.complianceStatus === 'Passed') ||
-        (statusFilter === 'FAIL' && call.complianceStatus === 'Critical Fail');
+        (statusFilter === 'FAIL' && call.complianceStatus === 'Critical Fail') ||
+        (statusFilter === 'UNANSWERED' && call.complianceStatus === 'Unanswered') ||
+        (statusFilter === 'AUDIO_ERROR' && (call.complianceStatus === 'Audio Error' || call.status === 'Audio Error'));
 
       const matchAgent = agentFilter === 'ALL' || call.agentName === agentFilter;
 
       const matchCampaign = campaignFilter === 'ALL' || call.campaign === campaignFilter;
 
+      // Smart Duration Filter
+      let matchDuration = true;
+      const talkSec = parseDurationSeconds(call.talkTime || call.duration || (call.rawFields && (call.rawFields['TALKTIME'] || call.rawFields['CALL TIME'])));
+      if (durationFilter === 'LONG') {
+        matchDuration = talkSec >= 180; // > 3 mins
+      } else if (durationFilter === 'MEDIUM') {
+        matchDuration = talkSec >= 60 && talkSec < 180; // 1 - 3 mins
+      } else if (durationFilter === 'SHORT') {
+        matchDuration = talkSec > 0 && talkSec < 60; // < 1 min
+      } else if (durationFilter === 'UNANSWERED') {
+        matchDuration = talkSec === 0;
+      }
+
+      // Smart Date Preset & Range Filter
       let matchDate = true;
-      if (dateFilter) {
-        const callDateNorm = getNormalizedDateString(call.callDate);
+      const callDateNorm = getNormalizedDateString(call.callDate);
+      if (datePreset === 'TODAY') {
+        const todayNorm = new Date().toISOString().split('T')[0];
+        matchDate = callDateNorm === todayNorm;
+      } else if (datePreset === 'YESTERDAY') {
+        const yest = new Date();
+        yest.setDate(yest.getDate() - 1);
+        const yestNorm = yest.toISOString().split('T')[0];
+        matchDate = callDateNorm === yestNorm;
+      } else if (datePreset === 'LAST_7') {
+        const sevenAgo = new Date();
+        sevenAgo.setDate(sevenAgo.getDate() - 7);
+        const sevenAgoNorm = sevenAgo.toISOString().split('T')[0];
+        matchDate = callDateNorm >= sevenAgoNorm;
+      } else if (datePreset === 'THIS_MONTH') {
+        const monthPrefix = new Date().toISOString().slice(0, 7);
+        matchDate = callDateNorm.startsWith(monthPrefix);
+      } else if (datePreset === 'CUSTOM') {
+        if (customStartDate && customEndDate) {
+          matchDate = callDateNorm >= customStartDate && callDateNorm <= customEndDate;
+        } else if (customStartDate) {
+          matchDate = callDateNorm >= customStartDate;
+        } else if (customEndDate) {
+          matchDate = callDateNorm <= customEndDate;
+        }
+      } else if (dateFilter) {
         matchDate = callDateNorm === dateFilter;
       }
 
-      if (!matchSearch || !matchStatus || !matchAgent || !matchCampaign || !matchDate) {
+      if (!matchSearch || !matchStatus || !matchAgent || !matchCampaign || !matchDuration || !matchDate) {
         return false;
       }
 
@@ -235,13 +337,42 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
       return true;
     });
-  }, [calls, searchTerm, statusFilter, agentFilter, campaignFilter, activeColumnFilters, dateFilter]);
+  }, [calls, searchTerm, statusFilter, agentFilter, campaignFilter, durationFilter, datePreset, customStartDate, customEndDate, dateFilter, activeColumnFilters]);
 
-  const totalPages = Math.ceil(filteredCalls.length / pageSize) || 1;
+  // Smart Sorted Dataset (highest to lowest talk time, score, date)
+  const sortedAndFilteredCalls = useMemo(() => {
+    const list = [...filteredCalls];
+    list.sort((a, b) => {
+      if (sortOption === 'talk_desc') {
+        const secA = parseDurationSeconds(a.talkTime || a.duration || (a.rawFields && (a.rawFields['TALKTIME'] || a.rawFields['CALL TIME'])));
+        const secB = parseDurationSeconds(b.talkTime || b.duration || (b.rawFields && (b.rawFields['TALKTIME'] || b.rawFields['CALL TIME'])));
+        return secB - secA;
+      }
+      if (sortOption === 'talk_asc') {
+        const secA = parseDurationSeconds(a.talkTime || a.duration || (a.rawFields && (a.rawFields['TALKTIME'] || a.rawFields['CALL TIME'])));
+        const secB = parseDurationSeconds(b.talkTime || b.duration || (b.rawFields && (b.rawFields['TALKTIME'] || b.rawFields['CALL TIME'])));
+        return secA - secB;
+      }
+      if (sortOption === 'score_desc') {
+        return (b.overallScore || 0) - (a.overallScore || 0);
+      }
+      if (sortOption === 'score_asc') {
+        return (a.overallScore || 0) - (b.overallScore || 0);
+      }
+      if (sortOption === 'date_asc') {
+        return parseCallDateTimestamp(a) - parseCallDateTimestamp(b);
+      }
+      // default date_desc (newest first)
+      return parseCallDateTimestamp(b) - parseCallDateTimestamp(a);
+    });
+    return list;
+  }, [filteredCalls, sortOption]);
+
+  const totalPages = Math.ceil(sortedAndFilteredCalls.length / pageSize) || 1;
   const paginatedCalls = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredCalls.slice(start, start + pageSize);
-  }, [filteredCalls, currentPage, pageSize]);
+    return sortedAndFilteredCalls.slice(start, start + pageSize);
+  }, [sortedAndFilteredCalls, currentPage, pageSize]);
 
   // Checkbox functions
   const toggleSelect = (id) => {
@@ -292,98 +423,98 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
   return (
     <div className="card-white overflow-hidden shadow-sm transition-all duration-300 relative flex flex-col">
       
-      {/* Top Filter & Search Controls */}
-      <div className="p-5 border-b border-[var(--border-color)] bg-gray-50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* Top Filter & Search Controls (Senior Executive UI/UX) */}
+      <div className="p-6 border-b border-slate-100 bg-slate-50/60 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         
-        {/* Search Bar */}
-        <div className="relative flex-1 min-w-[280px] lg:max-w-md">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+        {/* Search Bar (App Look & Feel) */}
+        <div className="relative flex-1 min-w-[320px] lg:max-w-md">
+          <Search className="w-4 h-4 text-indigo-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
           <input
             type="text"
-            placeholder="Search candidate, lead ID, agent or filters..."
+            placeholder="Search by ID (e.g. 1000), Agent (Kaushik), Candidate, Lead ID..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-            className="input-field pl-10 py-2.5 text-sm"
+            style={{ paddingLeft: '44px' }}
+            className="w-full h-11 pr-10 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-2xs"
           />
+          {searchTerm && (
+            <button
+              onClick={() => { setSearchTerm(''); setCurrentPage(1); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 cursor-pointer transition-colors"
+              title="Clear Search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {/* Dropdown Filters */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Clean Executive Controls Bar */}
+        <div className="flex flex-wrap items-center gap-3">
           
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-            className="input-field py-2.5 text-sm w-auto cursor-pointer"
-          >
-            <option value="ALL">All Statuses ({calls.length})</option>
-            <option value="AUDITED">Audited Only</option>
-            <option value="PENDING">Pending AI Audit</option>
-            <option value="PASSED">Passed Compliant</option>
-            <option value="FAIL">Critical Fail</option>
-          </select>
+          {/* Clear Sample/Demo Data Button */}
+          {onClearDemoData && calls.some(c => c.id && c.id.startsWith('CALL-2026-0807-')) && (
+            <button
+              onClick={onClearDemoData}
+              className="h-11 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-2xl text-xs font-extrabold text-rose-600 flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+              title="Remove all 50 mock demo records and keep real data only"
+            >
+              <Trash2 className="w-4 h-4 text-rose-500" />
+              <span>Clear Demo Data</span>
+            </button>
+          )}
 
-          {/* Agent Filter */}
-          <select
-            value={agentFilter}
-            onChange={(e) => { setAgentFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-            className="input-field py-2.5 text-sm w-auto cursor-pointer"
-          >
-            <option value="ALL">All Agents ({uniqueAgents.length})</option>
-            {uniqueAgents.map(ag => (
-              <option key={ag} value={ag}>{ag}</option>
-            ))}
-          </select>
-
-          {/* Campaign Filter */}
-          <select
-            value={campaignFilter}
-            onChange={(e) => { setCampaignFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-            className="input-field py-2.5 text-sm w-auto cursor-pointer"
-          >
-            <option value="ALL">All Campaigns ({uniqueCampaigns.length})</option>
-            {uniqueCampaigns.map(camp => (
-              <option key={camp} value={camp}>{camp}</option>
-            ))}
-          </select>
-
-          {/* Date Filter */}
-          <div className="flex items-center gap-2 bg-white border border-[var(--border-color)] rounded-lg px-3.5 py-2">
-            <span className="text-[12px] font-semibold text-[var(--text-muted)]">Date:</span>
+          {/* Calendar Date Picker (Choose Date, Month, Year) */}
+          <div className="h-11 px-4 bg-white border border-slate-200 hover:border-indigo-400 rounded-2xl flex items-center gap-2.5 shadow-2xs transition-all cursor-pointer">
+            <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span className="text-xs font-bold text-slate-400">Date:</span>
             <input 
               type="date"
               value={dateFilter}
               onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
-              className="bg-transparent border-none text-sm text-[var(--text-primary)] outline-none cursor-pointer p-0 min-w-[110px]"
+              className="bg-transparent border-none text-xs font-extrabold text-slate-800 outline-none cursor-pointer p-0 font-sans"
             />
             {dateFilter && (
               <button 
                 onClick={() => { setDateFilter(''); setCurrentPage(1); setSelectedIds(new Set()); }}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-0.5 cursor-pointer"
-                title="Clear Date Filter"
+                className="text-slate-400 hover:text-red-500 p-0.5 cursor-pointer ml-1 transition-colors"
+                title="Clear Date"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
+          </div>
+
+          {/* Talk Time Filter (ONLY 2 Options: Highest to Lowest & Lowest to Highest) */}
+          <div className="h-11 px-4 bg-white border border-slate-200 hover:border-indigo-400 rounded-2xl flex items-center gap-2.5 shadow-2xs transition-all cursor-pointer">
+            <Clock className="w-4 h-4 text-indigo-600 shrink-0" />
+            <select
+              value={sortOption}
+              onChange={(e) => { setSortOption(e.target.value); setCurrentPage(1); }}
+              className="bg-transparent border-none text-xs font-extrabold text-indigo-600 outline-none cursor-pointer p-0 font-sans"
+              style={{ width: 'auto' }}
+            >
+              <option value="talk_desc">Talk Time: Highest to Lowest ⬇</option>
+              <option value="talk_asc">Talk Time: Lowest to Highest ⬆</option>
+            </select>
           </div>
 
           {/* Columns Manager Button & Popover */}
           <div className="relative">
             <button
               onClick={() => setShowColumnsPopover(!showColumnsPopover)}
-              className="btn-secondary py-2 px-3 text-xs font-bold flex items-center gap-1.5 shadow-2xs"
+              className="h-11 px-4 bg-white border border-slate-200 hover:border-indigo-400 hover:bg-slate-50 rounded-2xl text-xs font-extrabold text-slate-700 flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
               <span>Columns ({visibleColumns.size})</span>
             </button>
             
             {showColumnsPopover && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-[var(--border-color)] rounded-xl shadow-lg p-4 z-30 flex flex-col gap-2 max-h-96 overflow-y-auto text-left">
-                <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-2 mb-1">
-                  <span className="font-semibold text-sm text-[var(--text-primary)]">Visible Columns</span>
+              <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 z-40 flex flex-col gap-3.5 text-left">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">Visible Columns</span>
                   <button 
                     onClick={() => setVisibleColumns(new Set(DEFAULT_COLUMNS))}
-                    className="text-[12px] text-indigo-600 hover:text-indigo-700 font-medium">
+                    className="text-xs text-indigo-600 hover:text-indigo-700 font-bold">
                     Reset
                   </button>
                 </div>
@@ -393,16 +524,16 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                   placeholder="Search columns..."
                   value={columnSearchQuery}
                   onChange={(e) => setColumnSearchQuery(e.target.value)}
-                  className="input-field py-1.5 px-3 text-sm"
+                  className="w-full h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 transition-all"
                 />
                 
-                <div className="flex flex-col gap-1 overflow-y-auto flex-1 pr-1 mt-1 font-sans">
+                <div className="flex flex-col gap-1 max-h-64 overflow-y-auto pr-1 font-sans">
                   {allAvailableColumns
                     .filter(col => col.toLowerCase().includes(columnSearchQuery.toLowerCase()))
                     .map(col => {
                       const isChecked = visibleColumns.has(col);
                       return (
-                        <label key={col} className="flex items-center gap-2.5 cursor-pointer text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-gray-50 p-1.5 rounded-lg transition-colors">
+                        <label key={col} className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 p-2 rounded-xl transition-colors">
                           <input
                             type="checkbox"
                             checked={isChecked}
@@ -412,7 +543,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                               else next.add(col);
                               setVisibleColumns(next);
                             }}
-                            className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
+                            className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
                           />
                           <span className="truncate">{col}</span>
                         </label>
@@ -550,11 +681,34 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
           <tbody className="divide-y divide-[var(--border-color)] text-sm text-[var(--text-secondary)]">
             {paginatedCalls.length === 0 ? (
               <tr>
-                <td colSpan={visibleColumns.size + 4} className="py-16 text-center text-[var(--text-muted)]">
-                  <div className="flex flex-col items-center justify-center space-y-2">
-                    <FileSpreadsheet className="w-10 h-10 text-[var(--text-muted)] opacity-35" />
-                    <p className="font-bold text-[var(--text-primary)]">No audits match your filter criteria</p>
-                    <p className="text-xs text-[var(--text-muted)]">Try adjusting search term or clearing grid filters</p>
+                <td colSpan={visibleColumns.size + 4} className="py-16 text-center">
+                  <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                      <Search className="w-7 h-7 text-indigo-500" />
+                    </div>
+                    <h4 className="font-extrabold text-slate-800 text-sm">No records found matching "{searchTerm || 'filters'}"</h4>
+                    <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                      {calls.length > 0
+                        ? `The currently loaded batch of ${calls.length} records ranges from ${calls[0]?.id || 'CALL-LOG-1000'} to ${calls[calls.length - 1]?.id || 'CALL-LOG-1359'}.`
+                        : 'No calls currently loaded. Import a CSV/Excel file or reset your filters.'}
+                    </p>
+                    <button
+                      onClick={() => {
+                        setSearchTerm('');
+                        setStatusFilter('ALL');
+                        setAgentFilter('ALL');
+                        setCampaignFilter('ALL');
+                        setDurationFilter('ALL');
+                        setDateFilter('');
+                        setDatePreset('ALL');
+                        setActiveColumnFilters({});
+                        setCurrentPage(1);
+                      }}
+                      className="mt-2 h-10 px-5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Clear Search & Reset All Filters ({calls.length} Records)</span>
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -627,7 +781,7 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
 
                   {/* Script Adherence Score */}
                   <td className="py-3 px-5 text-center font-bold font-mono">
-                    {call.status === 'Audited' ? (
+                    {call.overallScore !== null && call.overallScore !== undefined ? (
                       <span className={`inline-block px-2.5 py-1 rounded-full text-[12px] font-bold font-mono ${
                         call.overallScore >= 80 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                         call.overallScore >= 60 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
@@ -635,6 +789,10 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                       }`}>
                         {call.overallScore}%
                       </span>
+                    ) : call.complianceStatus === 'Unanswered' ? (
+                      <span className="text-gray-400 text-[11px] font-bold font-mono bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">N/A</span>
+                    ) : (call.status === 'Audio Error' || call.complianceStatus === 'Audio Error') ? (
+                      <span className="text-amber-700 text-[11px] font-bold font-mono bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">N/A</span>
                     ) : call.status === 'Failed' ? (
                       <span className="text-red-600 text-sm font-semibold">Failed</span>
                     ) : (
@@ -652,6 +810,21 @@ export default function CallTable({ calls, onSelectCall, onAuditSingleCall, isAu
                     {call.complianceStatus === 'Critical Fail' && (
                       <span className="badge badge-danger">
                         <ShieldAlert className="w-3 h-3 animate-pulse" /> Critical Fail
+                      </span>
+                    )}
+                    {call.complianceStatus === 'Unanswered' && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600 border border-gray-200">
+                        <PhoneOff className="w-3 h-3 text-gray-400" /> Unanswered
+                      </span>
+                    )}
+                    {call.complianceStatus === 'No Speech' && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                        <VolumeX className="w-3 h-3 text-slate-400" /> No Speech
+                      </span>
+                    )}
+                    {(call.complianceStatus === 'Audio Error' || call.status === 'Audio Error') && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        <AlertCircle className="w-3 h-3 text-amber-500" /> Audio Error
                       </span>
                     )}
                     {call.complianceStatus === 'Pending' && (

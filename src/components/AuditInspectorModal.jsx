@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Play, Pause, ShieldCheck, ShieldAlert, CheckCircle2, 
-  XCircle, Sparkles, ExternalLink, Lock, FileText, 
-  MessageSquare, X, AlertTriangle, Volume2, Clock, Check, Users
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  Play, Pause, ShieldCheck, ShieldAlert, CheckCircle2,
+  XCircle, Sparkles, ExternalLink, Lock, FileText,
+  MessageSquare, X, AlertTriangle, Volume2, Clock, Check, Users, PhoneOff, VolumeX, AlertCircle
 } from 'lucide-react';
-import { SCRIPT_CHECKPOINTS, RED_FLAG_RULES, PDF_SCRIPT_LINES } from '../data/scriptData';
+import { SCRIPT_CHECKPOINTS, RED_FLAG_RULES, PDF_SCRIPT_LINES, sanitizeCallRecord } from '../data/scriptData';
 
 const parseTimeToSeconds = (timeStr) => {
   if (!timeStr) return 0;
@@ -30,12 +30,12 @@ const analyzeScriptAlignment = (transcript, scriptLines) => {
       const textLower = t.text.toLowerCase();
 
       // Check keywords
-      const hasKeyword = line.keywords.some((keyword) => 
+      const hasKeyword = line.keywords.some((keyword) =>
         textLower.includes(keyword.toLowerCase())
       );
-      
+
       // Prohibited words (e.g. Greeting check)
-      const hasProhibited = line.prohibited && line.prohibited.some((word) => 
+      const hasProhibited = line.prohibited && line.prohibited.some((word) =>
         textLower.includes(word.toLowerCase())
       );
 
@@ -100,26 +100,122 @@ const CUTOFFS = {
   PL10: 420
 };
 
-export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtcActive, onOpenSlashRTC, username, password, portalUrl, auditProgressStatus }) {
+export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit, slashRtcActive, onOpenSlashRTC, username, password, portalUrl, sessionCookie, auditProgressStatus }) {
+  const call = useMemo(() => sanitizeCallRecord(rawCall), [rawCall]);
+
+  const displayTranscript = useMemo(() => {
+    if (!call.transcript || !Array.isArray(call.transcript)) return [];
+    return call.transcript.filter(line => {
+      if (!line || !line.text) return false;
+      const txt = line.text;
+      if (/\b(अगर|आप|अपर|नमक्कर|नमकर|परवाद)\b/.test(txt)) {
+        const matches = txt.match(/\b(अगर|आप|अपर|नमक्कर|नमकर|परवाद)\b/g);
+        if (matches && matches.length >= 2) return false;
+      }
+      return true;
+    });
+  }, [call.transcript]);
+
   const [isPlaying, setIsPlaying] = useState(false);
+
   const [playbackRate, setPlaybackRate] = useState(1);
   const [activeTab, setActiveTab] = useState('AUDIT'); // 'AUDIT' | 'TRANSCRIPT' | 'RAW_META'
   const [isAuditing, setIsAuditing] = useState(false);
 
-  // Real Audio player state
+  // Real Audio player state & refs
   const audioRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [audioError, setAudioError] = useState(false);
   const [hasAttemptedPlay, setHasAttemptedPlay] = useState(false);
-
   const [showFinalReport, setShowFinalReport] = useState(true);
-  
   const lastSpokenIndexRef = useRef(-1);
 
   const [activeLineIdx, setActiveLineIdx] = useState(-1);
   const transcriptContainerRef = useRef(null);
   const transcriptTabContainerRef = useRef(null);
+
+  const handleTriggerModalAudit = async () => {
+    if (isAuditing || !onReAudit) return;
+    setIsAuditing(true);
+    try {
+      await onReAudit(call);
+    } catch (err) {
+      console.error("Modal audit error:", err);
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  const proxyUrl = useMemo(() => {
+    if (!call.audioUrl) return '';
+    return `/api/audio-proxy?url=${encodeURIComponent(call.audioUrl)}&username=${encodeURIComponent(username || '')}&password=${encodeURIComponent(password || '')}&portalUrl=${encodeURIComponent(portalUrl || '')}&sessionCookie=${encodeURIComponent(sessionCookie || '')}`;
+  }, [call.audioUrl, username, password, portalUrl, sessionCookie]);
+
+  const [audioSrc, setAudioSrc] = useState(proxyUrl);
+  const [isUsingDirectUrl, setIsUsingDirectUrl] = useState(false);
+
+  useEffect(() => {
+    setAudioSrc(proxyUrl);
+    setIsUsingDirectUrl(false);
+  }, [proxyUrl]);
+
+  const openSlashRtcRecording = () => {
+    if (call.audioUrl) {
+      window.open(call.audioUrl, 'slashrtc_player', 'width=650,height=380,resizable=yes,scrollbars=yes');
+    }
+  };
+
+  const handlePlayToggle = async () => {
+    if (!call.audioUrl) return;
+
+    if (isPlaying) {
+      setIsPlaying(false);
+      if (audioRef.current) audioRef.current.pause();
+      return;
+    }
+
+    setHasAttemptedPlay(true);
+    setAudioError(false);
+
+    if (audioRef.current) {
+      try {
+        await audioRef.current.play();
+        setIsPlaying(true);
+        return;
+      } catch (err) {
+        console.warn("Primary audio playback failed:", err);
+      }
+    }
+
+    // Direct fallback if proxy audio element fails
+    if (!isUsingDirectUrl && call.audioUrl) {
+      console.log("Fallback audio source to direct SlashRTC link...");
+      setAudioSrc(call.audioUrl);
+      setIsUsingDirectUrl(true);
+
+      setTimeout(async () => {
+        if (audioRef.current) {
+          try {
+            audioRef.current.load();
+            await audioRef.current.play();
+            setIsPlaying(true);
+            setAudioError(false);
+            return;
+          } catch (err2) {
+            console.warn("Direct HTML5 audio play failed:", err2);
+            setAudioError(true);
+            setIsPlaying(false);
+            openSlashRtcRecording();
+          }
+        }
+      }, 150);
+    } else {
+      setAudioError(true);
+      setIsPlaying(false);
+      openSlashRtcRecording();
+    }
+  };
 
   // Handle play / pause toggle
   useEffect(() => {
@@ -157,56 +253,39 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
     }
   }, [call]);
 
-  // Track the active dialogue line index based on playback time
+  // Track active dialogue line using strictly real call.transcript
   useEffect(() => {
     if (!call.transcript || call.transcript.length === 0) {
       setActiveLineIdx(-1);
       return;
     }
-    
+
     let index = -1;
     for (let i = 0; i < call.transcript.length; i++) {
-      const lineSec = parseTimeToSeconds(call.transcript[i].time);
+      const lineSec = typeof call.transcript[i].start === 'number' ? call.transcript[i].start : parseTimeToSeconds(call.transcript[i].time);
       const nextLine = call.transcript[i + 1];
-      const nextLineSec = nextLine ? parseTimeToSeconds(nextLine.time) : (duration || lineSec + 5);
-      
+      const nextLineSec = nextLine 
+        ? (typeof nextLine.start === 'number' ? nextLine.start : parseTimeToSeconds(nextLine.time))
+        : (duration || lineSec + 15);
+
       if (currentTime >= lineSec && currentTime < nextLineSec) {
         index = i;
         break;
       }
     }
-    
-    // If no exact match is found but currentTime is greater than the last line, make the last line active
+
     if (index === -1 && currentTime >= parseTimeToSeconds(call.transcript[call.transcript.length - 1].time)) {
       index = call.transcript.length - 1;
     }
-    
+
     if (index !== activeLineIdx) {
       setActiveLineIdx(index);
     }
   }, [currentTime, call.transcript, duration, activeLineIdx]);
 
-  // Automatically scroll the active transcript line into view
+  // Manual scrolling mode: Auto scroll disabled as per user requirement
   useEffect(() => {
-    if (activeLineIdx === -1 || !isPlaying) return;
-    
-    if (activeTab === 'AUDIT') {
-      const activeEl = document.querySelector('.stt-active-highlight');
-      if (activeEl && transcriptContainerRef.current) {
-        activeEl.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest'
-        });
-      }
-    } else if (activeTab === 'TRANSCRIPT') {
-      const activeEl = document.querySelector('.stt-active-highlight-tab2');
-      if (activeEl && transcriptTabContainerRef.current) {
-        activeEl.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest'
-        });
-      }
-    }
+    // Intentionally left disabled so user can scroll manually
   }, [activeLineIdx, isPlaying, activeTab]);
 
   const handleTimeUpdate = () => {
@@ -251,8 +330,7 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
   const renderWordByWordText = (line, lineSec, nextLineSec) => {
     const words = line.text.split(/(\s+)/);
-    
-    // Filter out pure whitespace for timing calculation
+
     const timedWords = [];
     let wordCount = 0;
     words.forEach((w) => {
@@ -265,66 +343,21 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
     const totalWords = timedWords.length;
     if (totalWords === 0) return line.text;
 
-    // Estimate line duration
     const lineDuration = Math.max(1, nextLineSec - lineSec);
-    const isSpoken = currentTime >= lineSec;
-    const isLineActive = currentTime >= lineSec && currentTime < nextLineSec && isPlaying;
-
-    let currentWordIdx = -1;
-    if (isLineActive) {
-      const elapsed = currentTime - lineSec;
-      const progress = elapsed / lineDuration;
-      currentWordIdx = Math.floor(progress * totalWords);
-      if (currentWordIdx >= totalWords) currentWordIdx = totalWords - 1;
-    }
 
     let wordIdx = 0;
     return words.map((w, index) => {
       if (w.trim() === '') {
-        const nextWordIdx = wordIdx;
-        const shouldHideSpace = !showFinalReport && isLineActive && nextWordIdx > currentWordIdx;
-        const shouldHideSpaceFuture = !showFinalReport && !isSpoken;
-        if (shouldHideSpace || shouldHideSpaceFuture) {
-          return null;
-        }
         return <span key={index}>{w}</span>;
       }
-      
+
       const thisIdx = wordIdx;
       wordIdx++;
-
-      // In Live STT mode, hide words that haven't been reached yet
-      if (!showFinalReport) {
-        if (!isSpoken) {
-          return null;
-        }
-        if (isLineActive && thisIdx > currentWordIdx) {
-          return null;
-        }
-      }
-
-      // Check classes
-      let highlightClass = "transition-all duration-150 rounded px-0.5 select-none ";
-      if (isSpoken) {
-        if (isLineActive) {
-          if (thisIdx < currentWordIdx) {
-            highlightClass += "text-indigo-350 font-extrabold bg-indigo-500/10";
-          } else if (thisIdx === currentWordIdx) {
-            highlightClass += "text-white font-black bg-indigo-500/30 scale-105 shadow-3xs ring-1 ring-indigo-400/40";
-          } else {
-            highlightClass += "text-[var(--text-primary)] font-medium opacity-80";
-          }
-        } else {
-          highlightClass += "text-[var(--text-primary)] font-medium";
-        }
-      } else {
-        highlightClass += "text-[var(--text-muted)] opacity-50";
-      }
 
       return (
         <span
           key={index}
-          className={highlightClass}
+          className="hover:text-indigo-600 hover:underline cursor-pointer transition-colors"
           onClick={(e) => {
             e.stopPropagation();
             if (audioRef.current) {
@@ -333,7 +366,7 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
               setCurrentTime(targetTime);
             }
           }}
-          title="Click to play from this word"
+          title="Click to seek audio to this word"
         >
           {w}
         </span>
@@ -349,42 +382,87 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
   return (
     <div className="modal-backdrop">
-      <div className="bg-white text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl max-w-7xl w-full h-[90vh] flex flex-col relative overflow-hidden modal-content">
-        
-        {/* Hidden HTML5 Audio Element */}
+      <div 
+        style={{ 
+          maxWidth: '1380px', 
+          width: '95vw', 
+          height: '92vh', 
+          maxHeight: '940px', 
+          background: '#ffffff', 
+          borderRadius: '24px', 
+          border: '1px solid #cbd5e1', 
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          overflow: 'hidden', 
+          position: 'relative' 
+        }} 
+        className="modal-content"
+      >
+
+        {/* Hidden HTML5 Audio Element — supports proxy with automatic direct SlashRTC fallback */}
         <audio
           ref={audioRef}
-          src={call.audioUrl || ''}
+          src={audioSrc}
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
+          onError={() => {
+            console.warn("Audio element error on src:", audioSrc);
+            if (!isUsingDirectUrl && call.audioUrl) {
+              setAudioSrc(call.audioUrl);
+              setIsUsingDirectUrl(true);
+            } else {
+              setAudioError(true);
+              setIsPlaying(false);
+            }
+          }}
           preload="auto"
           muted={false}
         />
 
-        {/* Header Bar */}
-        <div className="px-7 py-4 bg-white border-b border-[var(--border-color)] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-[11px] shadow-sm">
+        {/* 1. Modal Top Header */}
+        <div style={{ padding: '14px 24px', background: '#ffffff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontWeight: '900', fontSize: '14px', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)', flexShrink: 0 }}>
               AI
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <h2 className="font-bold text-base text-[var(--text-primary)] leading-none">Call Audit Inspector</h2>
-                <span className="text-[11px] bg-gray-100 text-gray-500 font-mono px-2 py-0.5 rounded border border-gray-200 leading-none">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h2 style={{ fontSize: '17px', fontWeight: '800', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>Call Audit Inspector</h2>
+                <span style={{ fontSize: '11px', background: '#f1f5f9', color: '#475569', fontFamily: 'monospace', padding: '2px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: '600' }}>
                   {call.id}
                 </span>
               </div>
-              <p className="text-[13px] text-[var(--text-muted)] mt-1.5 font-normal">
-                Agent: <strong className="text-[var(--text-secondary)] font-medium">{call.agentName}</strong> | Candidate: <strong className="text-[var(--text-secondary)] font-medium">{call.candidateName}</strong> ({call.callDate})
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#64748b', marginTop: '3px', flexWrap: 'wrap' }}>
+                <span>Agent: <strong style={{ color: '#1e293b', fontWeight: '700' }}>{call.agentName}</strong></span>
+                <span style={{ color: '#cbd5e1' }}>•</span>
+                <span>Candidate: <strong style={{ color: '#1e293b', fontWeight: '700' }}>{call.candidateName}</strong></span>
+                <span style={{ color: '#cbd5e1' }}>•</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#94a3b8' }}>{call.callDate}</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
               onClick={handleReAuditClick}
               disabled={isAuditing}
-              className="btn-primary py-2 px-4 text-sm font-semibold"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '9px 18px',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                color: '#ffffff',
+                borderRadius: '10px',
+                fontWeight: '700',
+                fontSize: '12px',
+                border: 'none',
+                cursor: isAuditing ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+                transition: 'all 0.2s ease',
+                opacity: isAuditing ? 0.7 : 1
+              }}
             >
               <Sparkles className={`w-4 h-4 ${isAuditing ? 'animate-spin' : ''}`} />
               <span>{isAuditing ? (auditProgressStatus || 'Re-Auditing...') : 'Run AI Audit'}</span>
@@ -392,77 +470,101 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '6px', borderRadius: '8px', transition: 'all 0.15s ease' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#0f172a'; e.currentTarget.style.background = '#f1f5f9'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Audio Player Strip (Integrated SlashRTC Dynamic Link Player) */}
-        <div className="bg-gray-50 px-6 py-4 border-b border-[var(--border-color)] flex flex-col items-stretch gap-3 shrink-0">
-          
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+        {/* 2. Sleek Dark Audio Player Bar */}
+        <div style={{ background: '#0f172a', padding: '12px 24px', borderBottom: '1px solid #1e293b', display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0, color: '#ffffff' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
             
-            {/* Controls & Waveform */}
-            <div className="flex items-center gap-4 w-full md:w-auto flex-1">
+            {/* Play Button & Audio Seekbar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: '280px' }}>
               <button
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-md transition-all active:scale-95 shrink-0 cursor-pointer"
+                onClick={handlePlayToggle}
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: '#6366f1',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  transition: 'transform 0.15s ease'
+                }}
+                onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+                onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
                 title={isPlaying ? "Pause audio" : "Play audio"}
               >
-                {isPlaying ? <Pause className="w-4.5 h-4.5 fill-white" /> : <Play className="w-4.5 h-4.5 fill-white ml-0.5" />}
+                {isPlaying ? <Pause className="w-4.5 h-4.5 fill-white" /> : <Play className="w-4.5 h-4.5 fill-white" style={{ marginLeft: '2px' }} />}
               </button>
 
-              {/* Audio Waveform simulation */}
-              <div className="flex items-center gap-1.5 h-6 px-1 shrink-0">
+              {/* Animated Waveform Indicator */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', height: '22px', flexShrink: 0 }}>
                 {[10, 24, 16, 30, 12, 20, 6, 26, 14, 22, 8, 28].map((height, idx) => (
                   <div
                     key={idx}
-                    className="w-1 rounded-full bg-indigo-400 transition-all duration-300"
                     style={{
-                      height: isPlaying ? '100%' : '20%',
-                      animation: isPlaying
-                        ? `wave-bar 1s ease-in-out infinite ${idx * 0.1}s`
-                        : 'none',
-                      minHeight: '3px',
-                      maxHeight: `${height - 4}px`
+                      width: '3px',
+                      borderRadius: '99px',
+                      background: '#818cf8',
+                      height: isPlaying ? '100%' : '25%',
+                      animation: isPlaying ? `wave-bar 1s ease-in-out infinite ${idx * 0.1}s` : 'none',
+                      minHeight: '4px',
+                      maxHeight: `${height}px`,
+                      transition: 'all 0.3s ease'
                     }}
                   />
                 ))}
               </div>
 
               {/* Seekable Progress Bar */}
-              <div className="flex-1 md:max-w-md">
-                <div className="flex items-center justify-between text-[11px] text-gray-400 font-mono mb-1.5 select-none">
+              <div style={{ flex: 1, maxWidth: '400px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace', marginBottom: '4px', fontWeight: '600' }}>
                   <span>{formatTime(currentTime)}</span>
                   <span>{duration > 0 ? formatTime(duration) : (call.talkTime || call.duration)}</span>
                 </div>
-                <div 
+                <div
                   onClick={handleSeek}
-                  className="w-full bg-gray-200 hover:bg-gray-300 h-2 rounded-full relative cursor-pointer transition-colors"
+                  style={{ width: '100%', background: '#334155', height: '6px', borderRadius: '99px', position: 'relative', cursor: 'pointer' }}
                   title="Seek playback location"
                 >
-                  <div 
-                    className="bg-indigo-500 h-full rounded-full transition-all duration-75 relative"
-                    style={{ width: `${progressPercent}%` }}
+                  <div
+                    style={{ width: `${progressPercent}%`, background: '#818cf8', height: '100%', borderRadius: '99px', position: 'relative' }}
                   >
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-indigo-500 shadow-md hover:scale-110 transition-transform"></div>
+                    <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translate(50%, -50%)', width: '12px', height: '12px', borderRadius: '50%', background: '#ffffff', boxShadow: '0 2px 6px rgba(0,0,0,0.4)', border: '2px solid #6366f1' }} />
                   </div>
                 </div>
               </div>
 
-              {/* Playback speed multiplier */}
-              <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-[var(--border-color)] text-[11px] font-mono text-gray-500 shrink-0 select-none">
+              {/* Playback speed selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: '#1e293b', padding: '3px', borderRadius: '8px', border: '1px solid #334155', flexShrink: 0 }}>
                 {[1, 1.25, 1.5, 2].map(speed => (
                   <button
                     key={speed}
                     onClick={() => setPlaybackRate(speed)}
-                    className={`px-2 py-0.5 rounded font-semibold transition-all cursor-pointer ${
-                      playbackRate === speed 
-                        ? 'bg-indigo-600 text-white shadow-sm' 
-                        : 'hover:text-gray-700 hover:bg-gray-100'
-                    }`}
+                    style={{
+                      padding: '3px 7px',
+                      borderRadius: '5px',
+                      fontSize: '11px',
+                      fontFamily: 'monospace',
+                      fontWeight: '700',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: playbackRate === speed ? '#6366f1' : 'transparent',
+                      color: playbackRate === speed ? '#ffffff' : '#94a3b8',
+                      transition: 'all 0.15s ease'
+                    }}
                   >
                     {speed}x
                   </button>
@@ -470,26 +572,74 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 w-full md:w-auto justify-between md:justify-end flex-wrap">
-              <span className="text-[11px] text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5 font-medium">
-                ● Dialer Sync Active
+            {/* SlashRTC tab button & Sync status */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+              {call.audioUrl && (
+                <button
+                  onClick={openSlashRtcRecording}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(99, 102, 241, 0.15)',
+                    color: '#a5b4fc',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    border: '1px solid rgba(129, 140, 248, 0.3)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open / Play in SlashRTC Tab</span>
+                </button>
+              )}
+              <span style={{ fontSize: '11px', color: '#34d399', background: 'rgba(16, 185, 129, 0.15)', padding: '5px 12px', borderRadius: '99px', border: '1px solid rgba(52, 211, 153, 0.3)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600' }}>
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} className="animate-pulse" />
+                Dialer Sync Active
               </span>
             </div>
 
           </div>
 
+          {audioError && (
+            <div style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '8px', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#fbbf24' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Audio proxy couldn't stream file directly. Play using your active SlashRTC browser tab:</span>
+              </div>
+              <button
+                onClick={openSlashRtcRecording}
+                style={{ padding: '4px 10px', background: '#d97706', color: '#ffffff', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Play className="w-3 h-3 fill-current" />
+                <span>Play in SlashRTC Tab</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Tab Navigation */}
-        <div className="bg-white px-6 py-0 border-b border-[var(--border-color)] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-1">
+        {/* 3. Sub-Header: Pill Tabs & Script Adherence Score */}
+        <div style={{ padding: '10px 24px', background: '#ffffff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: '6px', background: '#f1f5f9', padding: '4px', borderRadius: '12px' }}>
             <button
               onClick={() => setActiveTab('AUDIT')}
-              className={`px-4 py-3 text-[13px] font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'AUDIT' 
-                  ? 'border-indigo-600 text-indigo-600 font-semibold' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              style={{
+                padding: '7px 16px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '700',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: activeTab === 'AUDIT' ? '#ffffff' : 'transparent',
+                color: activeTab === 'AUDIT' ? '#4f46e5' : '#64748b',
+                boxShadow: activeTab === 'AUDIT' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
             >
               <ShieldCheck className="w-4 h-4" />
               <span>AI Audit Evaluation</span>
@@ -497,11 +647,21 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
             <button
               onClick={() => setActiveTab('TRANSCRIPT')}
-              className={`px-4 py-3 text-[13px] font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'TRANSCRIPT' 
-                  ? 'border-indigo-600 text-indigo-600 font-semibold' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              style={{
+                padding: '7px 16px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '700',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: activeTab === 'TRANSCRIPT' ? '#ffffff' : 'transparent',
+                color: activeTab === 'TRANSCRIPT' ? '#4f46e5' : '#64748b',
+                boxShadow: activeTab === 'TRANSCRIPT' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
             >
               <MessageSquare className="w-4 h-4" />
               <span>Diarized Transcript</span>
@@ -509,33 +669,54 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
 
             <button
               onClick={() => setActiveTab('RAW_META')}
-              className={`px-4 py-3 text-[13px] font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'RAW_META' 
-                  ? 'border-indigo-600 text-indigo-600 font-semibold' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              style={{
+                padding: '7px 16px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '700',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: activeTab === 'RAW_META' ? '#ffffff' : 'transparent',
+                color: activeTab === 'RAW_META' ? '#4f46e5' : '#64748b',
+                boxShadow: activeTab === 'RAW_META' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
             >
               <FileText className="w-4 h-4" />
               <span>Raw Call Meta</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <span className="text-[var(--text-muted)]">Script Adherence:</span>
-            <span className={`px-2.5 py-0.5 rounded font-extrabold text-xs font-mono ${
-              (call.overallScore || 0) >= 80 
-                ? 'bg-emerald-500/5 text-emerald-400 border border-emerald-500/10' 
-                : 'bg-rose-500/5 text-rose-450 border border-rose-500/10'
-            }`}>
-              {call.overallScore || 0}%
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+            <span style={{ color: '#64748b', fontWeight: '600' }}>Script Adherence Score:</span>
+            {call.overallScore !== null && call.overallScore !== undefined ? (
+              <span style={{
+                padding: '4px 12px',
+                borderRadius: '99px',
+                fontWeight: '900',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                background: call.overallScore >= 80 ? '#f0fdf4' : call.overallScore >= 60 ? '#fffbeb' : '#fff1f2',
+                color: call.overallScore >= 80 ? '#15803d' : call.overallScore >= 60 ? '#b45309' : '#be123c',
+                border: `1px solid ${call.overallScore >= 80 ? '#bbf7d0' : call.overallScore >= 60 ? '#fde68a' : '#fecdd3'}`
+              }}>
+                {call.overallScore}%
+              </span>
+            ) : (
+              <span style={{ padding: '4px 12px', borderRadius: '99px', fontWeight: '700', fontSize: '11px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                0% (Not Audited)
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Tab Content Container */}
-        <div className="flex-1 overflow-y-auto p-6 bg-[var(--bg-app)]">
-          
-          {/* TAB 1: AUDIT BREAKDOWN */}
+        {/* 4. Tab Body Content — STRICT FLEX CONTAINMENT */}
+        <div style={{ flex: 1, overflow: 'hidden', padding: '18px 24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+
+          {/* TAB 1: MAIN AUDIT BREAKDOWN */}
           {activeTab === 'AUDIT' && (() => {
             const alignment = analyzeScriptAlignment(call.transcript, PDF_SCRIPT_LINES);
 
@@ -554,7 +735,6 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                 return { status: 'MISSED', label: '✗ MISSED' };
               }
 
-              // Live playback STT mode matching
               if (align?.seconds !== null) {
                 if (currentTime >= align.seconds) {
                   if (aiEvalPassed === false) return { status: 'MISSED', label: '✗ FAILED' };
@@ -572,25 +752,27 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
             };
 
             return (
-              <div className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto h-full items-stretch">
-                
+              <div style={{ display: 'flex', gap: '20px', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+
                 {/* Left Column: Live Speech-to-Text alignment */}
-                <div className="flex-1 lg:w-3/5 space-y-4 flex flex-col min-h-0">
-                  
-                  {/* Critical Red Flag Alert Box if present */}
+                <div style={{ flex: '1 1 58%', display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0, height: '100%', overflow: 'hidden' }}>
+
+                  {/* Critical Red Flag Alert Banner — BOUNDED MAX HEIGHT */}
                   {call.hasRedFlags && call.redFlags && call.redFlags.length > 0 && (
-                    <div className="bg-rose-500/5 border border-rose-500/10 rounded-xl p-4 shadow-sm shrink-0 text-left">
-                      <div className="flex items-start gap-3">
-                        <div className="p-1.5 bg-rose-500/10 text-rose-455 rounded-lg shrink-0">
-                          <ShieldAlert className="w-5 h-5 animate-pulse" />
+                    <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '14px', padding: '12px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left', flexShrink: 0, maxHeight: '160px', overflowY: 'auto' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                        <div style={{ padding: '6px', background: '#ffe4e6', color: '#be123c', borderRadius: '8px', flexShrink: 0 }}>
+                          <ShieldAlert className="w-4 h-4 animate-pulse" />
                         </div>
-                        <div className="flex-1">
-                          <h3 className="font-extrabold text-rose-400 text-xs uppercase tracking-wide">Critical Compliance Violations ({call.redFlags.length})</h3>
-                          <div className="mt-2.5 space-y-2">
+                        <div style={{ flex: 1 }}>
+                          <h3 style={{ fontSize: '12px', fontWeight: '800', color: '#9f1239', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px 0' }}>
+                            Critical Compliance Violations ({call.redFlags.length})
+                          </h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {call.redFlags.map((rf, idx) => (
-                              <div key={idx} className="bg-[var(--bg-card-solid)] border border-[var(--border-color)] p-2.5 rounded-lg text-xs font-semibold">
-                                <span className="text-rose-400 font-extrabold">⚠️ {rf.title}: </span>
-                                <span className="text-[var(--text-secondary)] font-medium">{rf.snippet || rf.description}</span>
+                              <div key={idx} style={{ background: '#ffffff', border: '1px solid #fecdd3', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                                <span style={{ color: '#be123c', fontWeight: '800' }}>⚠️ {rf.title}: </span>
+                                <span style={{ color: '#334155', fontWeight: '500' }}>{rf.snippet || rf.description}</span>
                               </div>
                             ))}
                           </div>
@@ -599,201 +781,221 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                     </div>
                   )}
 
-                  <div className="bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-4 shadow-xs shrink-0 text-left">
-                    <h3 className="font-extrabold text-xs text-[var(--text-primary)] uppercase tracking-wide">Speech-to-Text Aligned Stream</h3>
-                    <p className="text-[11px] text-[var(--text-muted)] font-medium mt-1 leading-relaxed">
-                      Auditor playback and compliance parsing workspace. Matched speech tags are aligned with script checkpoints. Click lines to seek.
-                    </p>
-                  </div>
-
-                  {/* Transcript Bubbles Stream */}
-                  <div ref={transcriptContainerRef} className="flex-1 overflow-y-auto space-y-4 pr-1.5 max-h-[50vh]">
-                    {call.transcript && call.transcript.length > 0 ? (
-                      call.transcript.map((line, idx) => {
-                        const lineSec = parseTimeToSeconds(line.time);
-                        const isSpoken = currentTime >= lineSec;
-
-                        // In Live STT mode, hide future bubbles that have not been spoken yet
-                        if (!showFinalReport && !isSpoken) {
-                          return null;
-                        }
-                        
-                        const nextLine = call.transcript[idx + 1];
-                        const nextLineSec = nextLine ? parseTimeToSeconds(nextLine.time) : (duration || lineSec + 5);
-                        const isActive = currentTime >= lineSec && currentTime < nextLineSec && isPlaying;
-
-                        const matchedScriptLine = PDF_SCRIPT_LINES.find((sLine) => {
-                          const align = alignment[sLine.id];
-                          return align && align.matchTime === line.time;
-                        });
-
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              if (audioRef.current) {
-                                audioRef.current.currentTime = lineSec;
-                                setCurrentTime(lineSec);
-                              }
-                            }}
-                            className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer text-left ${
-                              isActive
-                                ? 'bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md stt-active-highlight'
-                                : isSpoken
-                                ? 'bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] shadow-sm'
-                                : 'bg-[var(--bg-card-solid)]/30 border-[var(--border-color)]/30 text-[var(--text-muted)] opacity-50'
-                            } ${
-                              line.speaker === 'Agent' ? 'ml-0 mr-12' : 'ml-12 mr-0 bg-slate-900/20'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between text-[10px] mb-2 font-bold tracking-wide">
-                              <span className={`flex items-center gap-1.5 ${line.speaker === 'Agent' ? 'text-indigo-400' : 'text-emerald-450'}`}>
-                                <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                                {line.speaker === 'Agent' ? `Agent (${call.agentName})` : `Candidate (${call.candidateName})`}
-                              </span>
-                              <span className="font-mono text-[var(--text-muted)] font-semibold">{line.time}</span>
-                            </div>
-                            
-                            <p className="text-xs sm:text-[13px] leading-relaxed font-medium text-[var(--text-primary)] whitespace-pre-line">
-                              {renderWordByWordText(line, lineSec, nextLineSec)}
-                            </p>
-
-                            {matchedScriptLine && isSpoken && (
-                              <div className="mt-3 flex items-center gap-1.5">
-                                <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded flex items-center gap-1 border ${
-                                  alignment[matchedScriptLine.id].status === 'TAKEN_LATER'
-                                    ? 'bg-amber-500/5 border-amber-500/10 text-amber-400'
-                                    : 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400'
-                                }`}>
-                                  <Check className="w-3 h-3 shrink-0" />
-                                  <span>Aligned: {matchedScriptLine.title}</span>
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="text-center py-12 text-[var(--text-muted)] text-xs font-semibold italic">
-                        No transcript lines available. Run AI audit.
+                  {!call.isRealTranscribed && call.complianceStatus !== 'Unanswered' && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left', flexShrink: 0 }}>
+                      <div style={{ padding: '6px', background: '#fef3c7', color: '#b45309', borderRadius: '8px', flexShrink: 0 }}>
+                        <AlertTriangle className="w-4 h-4" />
                       </div>
-                    )}
-                  </div>
-
-                  {/* Feedback Summary Card */}
-                  <div className="card-white p-4.5 shrink-0 text-left">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-4 h-4 text-indigo-400" />
-                      <h3 className="font-extrabold text-[10px] text-[var(--text-primary)] uppercase tracking-wider">AI Audit Scorecard Summary</h3>
+                      <div>
+                        <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#78350f', textTransform: 'uppercase', margin: 0 }}>
+                          Raw Audio Loaded — Speech-to-Text Not Yet Run
+                        </h4>
+                        <p style={{ fontSize: '11px', color: '#92400e', margin: '2px 0 0 0', lineHeight: 1.4 }}>
+                          Click <strong style={{ color: '#4f46e5' }}>"Run AI Audit"</strong> in the top header bar to generate real Speech-to-Text.
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs text-[var(--text-secondary)] leading-relaxed bg-[var(--bg-card-subtle)] p-3 rounded-lg border border-[var(--border-color)] font-semibold">
-                      {call.evaluation?.feedback || "Call successfully evaluated."}
-                    </p>
+                  )}
+
+                  {/* Speech-to-Text Aligned Stream Card — EXPANDS TO FILL REMAINING HEIGHT */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left' }}>
+                    
+                    <div style={{ paddingBottom: '10px', borderBottom: '1px solid #f1f5f9', marginBottom: '12px', flexShrink: 0 }}>
+                      <h3 style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <MessageSquare className="w-4 h-4 text-indigo-600" />
+                        <span>Speech-to-Text Aligned Stream</span>
+                      </h3>
+                      <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0 0', lineHeight: 1.4 }}>
+                        Auditor playback and compliance workspace. Click lines or words to jump directly to audio timestamps.
+                      </p>
+                    </div>
+
+                    {/* Stream Scrollable List */}
+                    <div ref={transcriptContainerRef} style={{ flex: 1, overflowY: 'auto', paddingRight: '6px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
+                      {call.isRealTranscribed && displayTranscript && displayTranscript.length > 0 ? (
+                        displayTranscript.map((line, idx) => {
+                          const lineSec = typeof line.start === 'number' ? line.start : parseTimeToSeconds(line.time);
+                          const nextLine = displayTranscript[idx + 1];
+                          const nextLineSec = nextLine 
+                            ? (typeof nextLine.start === 'number' ? nextLine.start : parseTimeToSeconds(nextLine.time)) 
+                            : (duration || lineSec + 5);
+                          const isActive = currentTime >= lineSec && currentTime < nextLineSec && isPlaying;
+
+                          const matchedScriptLine = PDF_SCRIPT_LINES.find((sLine) => {
+                            const align = alignment[sLine.id];
+                            return align && align.matchTime === line.time;
+                          });
+
+                          const canSeek = typeof line.start === 'number' || (line.time && line.time !== 'Unavailable');
+
+                          const isAgent = line.speaker === 'Agent';
+                          const isCandidate = line.speaker === 'Candidate';
+
+                          const displaySpeaker = line.speaker && line.speaker !== 'Unknown'
+                            ? (isAgent ? `Agent (${call.agentName})` : isCandidate ? `Candidate (${call.candidateName})` : line.speaker)
+                            : (idx % 2 === 0 ? `Agent (${call.agentName})` : `Candidate (${call.candidateName})`);
+
+                          const activeIsCandidate = isCandidate || (!isAgent && idx % 2 !== 0);
+
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (canSeek && audioRef.current) {
+                                  audioRef.current.currentTime = lineSec;
+                                  setCurrentTime(lineSec);
+                                }
+                              }}
+                              style={{
+                                padding: '14px',
+                                borderRadius: activeIsCandidate ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                                border: isActive 
+                                  ? '2px solid #6366f1' 
+                                  : activeIsCandidate 
+                                    ? '1px solid #bbf7d0' 
+                                    : '1px solid #e2e8f0',
+                                background: isActive 
+                                  ? '#eef2ff' 
+                                  : activeIsCandidate 
+                                    ? '#f0fdf4' 
+                                    : '#ffffff',
+                                marginLeft: activeIsCandidate ? '32px' : '0px',
+                                marginRight: activeIsCandidate ? '0px' : '32px',
+                                cursor: canSeek ? 'pointer' : 'default',
+                                transition: 'all 0.2s ease',
+                                boxShadow: isActive ? '0 4px 12px rgba(99, 102, 241, 0.15)' : '0 1px 2px rgba(0,0,0,0.03)',
+                                wordBreak: 'break-word',
+                                overflowWrap: 'anywhere'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', fontWeight: '700', marginBottom: '6px' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: activeIsCandidate ? '#15803d' : '#4f46e5' }}>
+                                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: activeIsCandidate ? '#22c55e' : '#6366f1' }} />
+                                  {displaySpeaker}
+                                </span>
+                                <span style={{ fontFamily: 'monospace', color: '#94a3b8', fontWeight: '600' }}>{line.time || 'Unavailable'}</span>
+                              </div>
+
+                              <p style={{ fontSize: '12px', lineHeight: '1.6', color: '#1e293b', margin: 0, fontWeight: 400, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                                {renderWordByWordText(line, lineSec, nextLineSec)}
+                              </p>
+
+                              {matchedScriptLine && (
+                                <div style={{ marginTop: '8px', display: 'flex' }}>
+                                  <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 8px', borderRadius: '6px', background: alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#fffbeb' : '#ecfdf5', border: `1px solid ${alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#fde68a' : '#a7f3d0'}`, color: alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#b45309' : '#047857', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <Check className="w-3 h-3" />
+                                    <span>Aligned: {matchedScriptLine.title}</span>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div style={{ padding: '30px 16px', textAlign: 'center', background: '#f8fafc', borderRadius: '14px', border: '2px dashed #cbd5e1', margin: 'auto 0' }}>
+                          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#eef2ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' }}>
+                            <Sparkles className="w-5 h-5 animate-pulse" />
+                          </div>
+                          <h4 style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a', margin: '0 0 4px 0' }}>Real Speech-to-Text Not Yet Run</h4>
+                          <p style={{ fontSize: '12px', color: '#64748b', margin: '0 auto 4px auto', maxWidth: '340px', lineHeight: 1.4 }}>
+                            Click <strong style={{ color: '#4f46e5' }}>"Run AI Audit"</strong> in the top header to stream the audio and generate real-time transcript alignments.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
 
                 </div>
 
-                {/* Right Column: Summarized Checkpoints & Voice Audits */}
-                <div className="w-full lg:w-2/5 flex flex-col min-h-0 gap-4">
+                {/* Right Column: Voice Quality Audits & 10 Checkpoints Checklist */}
+                <div style={{ flex: '1 1 42%', display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0, height: '100%', overflow: 'hidden' }}>
 
-                  {/* Technical & Voice Quality Audits Card */}
-                  <div className="bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-4 shadow-sm shrink-0 text-left">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Volume2 className="w-4 h-4 text-indigo-400" />
-                      <h3 className="font-extrabold text-[10px] text-[var(--text-primary)] uppercase tracking-wider">Voice Parameters Audit</h3>
+                  {/* Technical & Voice Quality Audits Card — FIXED HEIGHT COMPACT */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                      <Volume2 className="w-4 h-4 text-indigo-600" />
+                      <h3 style={{ fontSize: '11px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                        Voice Parameters Audit
+                      </h3>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg font-semibold">
-                        <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-wide">Voice Clarity</span>
-                        <span className={`font-extrabold flex items-center gap-1 mt-1 ${
-                          (call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? 'text-emerald-400' : 'text-amber-400'
-                        }`}>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', display: 'block', letterSpacing: '0.05em' }}>Voice Clarity</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '5px', background: (call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '#ecfdf5' : '#fffbeb', color: (call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '#047857' : '#b45309', border: `1px solid ${(call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '#a7f3d0' : '#fde68a'}` }}>
                           {(call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '✓ Clear & Audible' : `⚠️ ${call.callQuality?.voiceClarity || 'Good'}`}
                         </span>
                       </div>
 
-                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg font-semibold">
-                        <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-wide">Connection</span>
-                        <span className={`font-extrabold flex items-center gap-1 mt-1 ${
-                          (call.callQuality?.networkIssues === 'None' || !call.callQuality) ? 'text-emerald-400' : 'text-rose-400'
-                        }`}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', display: 'block', letterSpacing: '0.05em' }}>Connection</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '5px', background: (call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '#ecfdf5' : '#fff1f2', color: (call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '#047857' : '#be123c', border: `1px solid ${(call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '#a7f3d0' : '#fecdd3'}` }}>
                           {(call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '✓ Stable' : `⚠️ ${call.callQuality?.networkIssues || 'None'}`}
                         </span>
                       </div>
 
-                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg font-semibold">
-                        <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-wide">Ambient Noise</span>
-                        <span className={`font-extrabold flex items-center gap-1 mt-1 ${
-                          (call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? 'text-emerald-400' : 'text-amber-400'
-                        }`}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', display: 'block', letterSpacing: '0.05em' }}>Ambient Noise</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '5px', background: (call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '#ecfdf5' : '#fffbeb', color: (call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '#047857' : '#b45309', border: `1px solid ${(call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '#a7f3d0' : '#fde68a'}` }}>
                           {(call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '✓ Quiet' : `⚠️ ${call.callQuality?.backgroundNoise || 'None'}`}
                         </span>
                       </div>
 
-                      <div className="bg-[var(--bg-card-subtle)] border border-[var(--border-color)] p-2.5 rounded-lg font-semibold">
-                        <span className="text-[9px] text-[var(--text-muted)] font-bold block uppercase tracking-wide">Tone & Pace</span>
-                        <span className="font-extrabold flex items-center gap-1 mt-1 text-indigo-400">
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', display: 'block', letterSpacing: '0.05em' }}>Tone & Pace</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '5px', background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' }}>
                           {call.callQuality?.agentTone || 'Polite'} ({call.callQuality?.agentPacing || 'Normal'})
                         </span>
                       </div>
                     </div>
 
-                    <div className="mt-3 bg-indigo-500/5 border border-indigo-500/10 p-2.5 rounded-lg flex items-center gap-2 font-semibold">
-                      <Users className="w-4 h-4 text-indigo-400 shrink-0" />
-                      <div className="text-[11px] text-[var(--text-primary)]">
-                        Candidate Sentiment: <strong className="font-extrabold text-emerald-400">{call.callQuality?.candidateSentiment || 'Interested'}</strong>
+                    <div style={{ marginTop: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748b', fontWeight: '600' }}>
+                        <Users className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Candidate Sentiment</span>
                       </div>
+                      <strong style={{ fontSize: '11px', fontWeight: '800', color: '#047857', background: '#ecfdf5', padding: '2px 8px', borderRadius: '5px', border: '1px solid #a7f3d0' }}>
+                        {call.callQuality?.candidateSentiment || 'Neutral'}
+                      </strong>
                     </div>
                   </div>
 
-                  {/* Summarized Script Checkpoints Checklist */}
-                  <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-4 shadow-sm text-left">
-                    
-                    <div className="pb-3 border-b border-[var(--border-color)] flex items-center justify-between shrink-0 mb-3">
+                  {/* Speech-to-Text Checkpoints Checklist Card — EXPANDS TO FILL REMAINING HEIGHT */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left' }}>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9', marginBottom: '12px', flexShrink: 0 }}>
                       <div>
-                        <h3 className="font-extrabold text-xs text-[var(--text-primary)] uppercase tracking-wide">Speech-to-Text Checkpoints</h3>
-                        <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5 leading-none">
-                          10 Checkpoints pass/fail audit results.
+                        <h3 style={{ fontSize: '12px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                          Speech-to-Text Checkpoints
+                        </h3>
+                        <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0 0 0' }}>
+                          10 Checkpoints pass/fail evaluation results.
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-1.5 bg-[var(--bg-card-subtle)] border border-[var(--border-color)] px-2 py-0.5 rounded shadow-3xs">
-                        <input 
-                          type="checkbox" 
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '3px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                        <input
+                          type="checkbox"
                           id="toggleReport"
-                          checked={!showFinalReport} 
+                          checked={!showFinalReport}
                           onChange={(e) => setShowFinalReport(!e.target.checked)}
-                          className="w-3.5 h-3.5 text-indigo-500 rounded cursor-pointer"
+                          style={{ cursor: 'pointer', accentColor: '#4f46e5' }}
                         />
-                        <label htmlFor="toggleReport" className="text-[9px] font-extrabold text-[var(--text-muted)] cursor-pointer select-none">
+                        <label htmlFor="toggleReport" style={{ fontSize: '10px', fontWeight: '700', color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
                           Live Match Mode
                         </label>
                       </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[42vh]">
+                    {/* Scrollable Checkpoint Items List — GUARANTEED TO SCROLL INSIDE CONTAINER */}
+                    <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
                       {PDF_SCRIPT_LINES.map((line, idx) => {
                         const { status, label } = getCheckpointState(line.id, line.evalKey);
                         const isClickable = alignment[line.id]?.seconds !== null;
 
-                        let circleBg = 'border-gray-300 bg-gray-100 text-gray-400';
-                        let statusLabelColor = 'text-gray-500 bg-gray-100 border border-gray-200';
-                        let itemBorderColor = 'border-[var(--border-color)] bg-[var(--bg-card-subtle)]/40 hover:border-gray-400';
-                        
-                        if (status === 'COMPLETED') {
-                          circleBg = 'bg-emerald-600 border-emerald-700 text-white shadow-xs font-black';
-                          statusLabelColor = 'text-emerald-700 bg-emerald-50 border border-emerald-200 font-extrabold';
-                          itemBorderColor = 'border-emerald-200/80 bg-emerald-50/30';
-                        } else if (status === 'TAKEN_LATER') {
-                          circleBg = 'bg-emerald-600 border-emerald-700 text-white shadow-xs font-black';
-                          statusLabelColor = 'text-emerald-700 bg-emerald-50 border border-emerald-200 font-extrabold';
-                          itemBorderColor = 'border-emerald-200/80 bg-emerald-50/30';
-                        } else if (status === 'MISSED') {
-                          circleBg = 'bg-rose-600 border-rose-700 text-white shadow-xs font-black';
-                          statusLabelColor = 'text-rose-700 bg-rose-50 border border-rose-200 font-extrabold';
-                          itemBorderColor = 'border-rose-200/80 bg-rose-50/30';
-                        }
+                        const isPassed = status === 'COMPLETED' || status === 'TAKEN_LATER';
+                        const isFailed = status === 'MISSED';
 
                         return (
                           <div
@@ -805,24 +1007,51 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                                 setCurrentTime(sec);
                               }
                             }}
-                            className={`p-3 rounded-xl border text-left transition-all duration-150 ${itemBorderColor} ${
-                              isClickable ? 'cursor-pointer hover:shadow-2xs active:scale-[0.99]' : ''
-                            }`}
+                            style={{
+                              padding: '10px 12px',
+                              borderRadius: '10px',
+                              border: isPassed ? '1px solid #bbf7d0' : isFailed ? '1px solid #fecdd3' : '1px solid #e2e8f0',
+                              background: isPassed ? '#f0fdf4' : isFailed ? '#fff1f2' : '#ffffff',
+                              cursor: isClickable ? 'pointer' : 'default',
+                              transition: 'all 0.15s ease'
+                            }}
                           >
-                            <div className="flex items-start gap-2.5">
-                              <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-black shrink-0 mt-0.5 ${circleBg}`}>
-                                {status === 'COMPLETED' || status === 'TAKEN_LATER' ? '✓' : status === 'MISSED' ? '✗' : idx + 1}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                              <div style={{
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '10px',
+                                fontWeight: '900',
+                                flexShrink: 0,
+                                marginTop: '1px',
+                                background: isPassed ? '#16a34a' : isFailed ? '#dc2626' : '#e2e8f0',
+                                color: isPassed || isFailed ? '#ffffff' : '#64748b'
+                              }}>
+                                {isPassed ? '✓' : isFailed ? '✗' : idx + 1}
                               </div>
 
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                                  <span className="font-extrabold text-[var(--text-primary)] text-xs truncate">{line.title}</span>
-                                  <span className={`text-[9.5px] px-2 py-0.5 rounded-md font-mono border ${statusLabelColor}`}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                  <span style={{ fontSize: '12px', fontWeight: '800', color: '#0f172a' }}>{line.title}</span>
+                                  <span style={{
+                                    fontSize: '9px',
+                                    fontFamily: 'monospace',
+                                    fontWeight: '800',
+                                    padding: '2px 6px',
+                                    borderRadius: '99px',
+                                    background: isPassed ? '#dcfce7' : isFailed ? '#ffe4e6' : '#f1f5f9',
+                                    color: isPassed ? '#15803d' : isFailed ? '#be123c' : '#64748b',
+                                    border: `1px solid ${isPassed ? '#86efac' : isFailed ? '#fca5a5' : '#cbd5e1'}`
+                                  }}>
                                     {label}
                                   </span>
                                 </div>
 
-                                <p className="text-[11px] text-[var(--text-secondary)] font-medium mt-1 leading-relaxed">
+                                <p style={{ fontSize: '11px', color: '#64748b', marginTop: '3px', lineHeight: '1.4', margin: '3px 0 0 0', fontWeight: 400 }}>
                                   {line.summary || line.text}
                                 </p>
                               </div>
@@ -840,49 +1069,60 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
             );
           })()}
 
-          {/* TAB 2: SPEAKER TRANSCRIPT */}
+          {/* TAB 2: DIARIZED TRANSCRIPT */}
           {activeTab === 'TRANSCRIPT' && (
-            <div className="max-w-3xl mx-auto space-y-3">
-              <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl text-xs text-indigo-400 font-bold flex items-center justify-between shadow-2xs font-mono">
+            <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left', width: '100%', height: '100%', overflow: 'hidden' }}>
+              <div style={{ padding: '10px 16px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '10px', fontSize: '11px', color: '#4338ca', fontWeight: '700', display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', flexShrink: 0 }}>
                 <span>Speech-to-Text Diarization (Agent vs Candidate)</span>
                 <span>Duration: {call.talkTime || call.duration}</span>
               </div>
 
-              {call.transcript && call.transcript.length > 0 ? (
-                <div ref={transcriptTabContainerRef} className="space-y-4">
-                  {call.transcript.map((line, idx) => {
-                    const lineSec = parseTimeToSeconds(line.time);
-                    const nextLine = call.transcript[idx + 1];
-                    const nextLineSec = nextLine ? parseTimeToSeconds(nextLine.time) : (duration || lineSec + 5);
+              {displayTranscript && displayTranscript.length > 0 ? (
+                <div ref={transcriptTabContainerRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
+                  {displayTranscript.map((line, idx) => {
+                    const lineSec = typeof line.start === 'number' ? line.start : parseTimeToSeconds(line.time);
+                    const nextLine = displayTranscript[idx + 1];
+                    const nextLineSec = nextLine 
+                      ? (typeof nextLine.start === 'number' ? nextLine.start : parseTimeToSeconds(nextLine.time))
+                      : (duration || lineSec + 5);
                     const isActive = currentTime >= lineSec && currentTime < nextLineSec && isPlaying;
+                    const canSeek = typeof line.start === 'number' || (line.time && line.time !== 'Unavailable');
+
+                    const isAgent = line.speaker === 'Agent';
+                    const isCandidate = line.speaker === 'Candidate';
+
+                    const displaySpeaker = line.speaker && line.speaker !== 'Unknown'
+                      ? (isAgent ? `Agent (${call.agentName})` : isCandidate ? `Candidate (${call.candidateName})` : line.speaker)
+                      : (idx % 2 === 0 ? `Agent (${call.agentName})` : `Candidate (${call.candidateName})`);
+
+                    const activeIsCandidate = isCandidate || (!isAgent && idx % 2 !== 0);
 
                     return (
-                      <div 
-                        key={idx} 
+                      <div
+                        key={idx}
                         onClick={() => {
-                          if (audioRef.current) {
+                          if (canSeek && audioRef.current) {
                             audioRef.current.currentTime = lineSec;
                             setCurrentTime(lineSec);
                           }
                         }}
-                        className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
-                          isActive
-                            ? 'bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md stt-active-highlight-tab2'
-                            : 'bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] shadow-sm'
-                        } ${
-                          line.speaker === 'Agent'
-                            ? 'ml-0 mr-12'
-                            : 'ml-12 mr-0 bg-slate-900/20'
-                        }`}
+                        style={{
+                          padding: '14px',
+                          borderRadius: activeIsCandidate ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                          border: isActive ? '2px solid #6366f1' : activeIsCandidate ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                          background: isActive ? '#eef2ff' : activeIsCandidate ? '#f0fdf4' : '#ffffff',
+                          marginLeft: activeIsCandidate ? '32px' : '0px',
+                          marginRight: activeIsCandidate ? '0px' : '32px',
+                          cursor: canSeek ? 'pointer' : 'default',
+                          wordBreak: 'break-word',
+                          overflowWrap: 'anywhere'
+                        }}
                       >
-                        <div className="flex items-center justify-between text-[10px] mb-2 font-bold tracking-wide">
-                          <span className={`flex items-center gap-1.5 ${line.speaker === 'Agent' ? 'text-indigo-400' : 'text-emerald-455'}`}>
-                            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                            {line.speaker === 'Agent' ? `Agent (${call.agentName})` : `Candidate (${call.candidateName})`}
-                          </span>
-                          <span className="font-mono text-[var(--text-muted)] text-[10px]">{line.time}</span>
+                        <div style={{ display: 'flex', items: 'center', justifyContent: 'space-between', fontSize: '11px', fontWeight: '700', marginBottom: '6px' }}>
+                          <span style={{ color: activeIsCandidate ? '#15803d' : '#4f46e5' }}>{displaySpeaker}</span>
+                          <span style={{ fontFamily: 'monospace', color: '#94a3b8' }}>{line.time || 'Unavailable'}</span>
                         </div>
-                        <p className="text-xs sm:text-[13px] leading-relaxed font-medium text-[var(--text-primary)] whitespace-pre-line">
+                        <p style={{ fontSize: '12px', lineHeight: '1.6', color: '#1e293b', margin: 0, fontWeight: 400, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                           {renderWordByWordText(line, lineSec, nextLineSec)}
                         </p>
                       </div>
@@ -890,27 +1130,29 @@ export default function AuditInspectorModal({ call, onClose, onReAudit, slashRtc
                   })}
                 </div>
               ) : (
-                <div className="text-center py-12 text-[var(--text-muted)] text-xs font-semibold italic">
-                  No transcript available. Run AI audit.
+                <div style={{ textAlign: 'center', padding: '36px', background: '#ffffff', borderRadius: '14px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '12px', fontWeight: '600' }}>
+                  Transcript not available.
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB 3: RAW EXCEL METADATA (80+ fields) */}
+          {/* TAB 3: RAW CALL META */}
           {activeTab === 'RAW_META' && (
-            <div className="max-w-4xl mx-auto bg-[var(--bg-card-solid)] border border-[var(--border-color)] rounded-xl p-5 shadow-sm transition-colors text-left">
-              <h3 className="font-extrabold text-[var(--text-primary)] text-xs uppercase tracking-wider mb-4">Raw Call Ingestion Columns</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs font-semibold">
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Date:</span> <strong className="text-[var(--text-primary)] font-bold">{call.callDate}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Caller ID:</span> <strong className="text-[var(--text-primary)] font-bold">{call.callerId}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Agent:</span> <strong className="text-[var(--text-primary)] font-bold">{call.agentName}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Campaign:</span> <strong className="text-[var(--text-primary)] font-bold">{call.campaign}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Queue:</span> <strong className="text-[var(--text-primary)] font-bold">{call.queue}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Candidate:</span> <strong className="text-[var(--text-primary)] font-bold">{call.candidateName}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Email:</span> <strong className="text-[var(--text-primary)] font-bold">{call.candidateEmail}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)]"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Disposition:</span> <strong className="text-[var(--text-primary)] font-bold">{call.disposition}</strong></div>
-                <div className="p-3 bg-[var(--bg-card-subtle)] rounded-lg border border-[var(--border-color)] col-span-full"><span className="text-[var(--text-muted)] font-mono block mb-1 text-[9px]">Audio URL Link:</span> <strong className="text-[var(--text-primary)] font-mono text-[10px] break-all select-all font-medium">{call.audioUrl}</strong></div>
+            <div style={{ maxWidth: '900px', margin: '0 auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px', textAlign: 'left', width: '100%', height: '100%', overflowY: 'auto' }}>
+              <h3 style={{ fontSize: '12px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '14px' }}>
+                Raw Call Ingestion Columns
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px', fontSize: '11px' }}>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Date:</span> <strong style={{ color: '#0f172a' }}>{call.callDate}</strong></div>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Caller ID:</span> <strong style={{ color: '#0f172a' }}>{call.callerId}</strong></div>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Agent:</span> <strong style={{ color: '#0f172a' }}>{call.agentName}</strong></div>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Campaign:</span> <strong style={{ color: '#0f172a' }}>{call.campaign}</strong></div>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Queue:</span> <strong style={{ color: '#0f172a' }}>{call.queue}</strong></div>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Candidate:</span> <strong style={{ color: '#0f172a' }}>{call.candidateName}</strong></div>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Email:</span> <strong style={{ color: '#0f172a' }}>{call.candidateEmail}</strong></div>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Disposition:</span> <strong style={{ color: '#0f172a' }}>{call.disposition}</strong></div>
+                <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', gridColumn: '1 / -1' }}><span style={{ color: '#94a3b8', fontFamily: 'monospace', display: 'block', marginBottom: '3px', fontSize: '10px' }}>Audio URL Link:</span> <strong style={{ color: '#0f172a', fontFamily: 'monospace', fontSize: '10px', wordBreak: 'break-all' }}>{call.audioUrl}</strong></div>
               </div>
             </div>
           )}
