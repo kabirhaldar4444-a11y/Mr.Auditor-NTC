@@ -645,7 +645,7 @@ export default function App() {
           reader.readAsDataURL(audioBlob);
         });
 
-        const whisperRes = await fetch('/api/openai-whisper-proxy', {
+        let whisperRes = await fetch('/api/openai-whisper-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
           body: JSON.stringify({
@@ -654,6 +654,31 @@ export default function App() {
             mimeType: detectedMime
           })
         });
+
+        // Direct browser fallback if proxy endpoint fails (e.g. Vercel serverless 500)
+        if (!whisperRes.ok && apiKey && apiKey.startsWith('sk-')) {
+          console.warn(`[STT] Whisper proxy returned HTTP ${whisperRes.status}. Retrying via direct browser call to OpenAI STT API...`);
+          try {
+            const audioFile = new File([audioBlob], `recording.${detectedExt}`, { type: detectedMime });
+            const formData = new FormData();
+            formData.append('file', audioFile, `recording.${detectedExt}`);
+            formData.append('model', 'whisper-1');
+            formData.append('response_format', 'verbose_json');
+            formData.append('timestamp_granularities[]', 'segment');
+
+            const directRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${apiKey}` },
+              body: formData
+            });
+
+            if (directRes.ok) {
+              whisperRes = directRes;
+            }
+          } catch (directErr) {
+            console.error('[STT] Direct browser Whisper fetch exception:', directErr);
+          }
+        }
 
         if (!whisperRes.ok) {
           const errText = await whisperRes.text();
