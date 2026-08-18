@@ -149,7 +149,10 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
     if (isAuditing || !onReAudit) return;
     setIsAuditing(true);
     try {
-      await onReAudit(call);
+      // Always force fresh Whisper transcription when user clicks "Run AI Audit"
+      // by passing a clean call object with transcript cleared
+      const freshCall = { ...call, transcript: null, isRealTranscribed: false };
+      await onReAudit(freshCall);
     } catch (err) {
       console.error("Modal audit error:", err);
     } finally {
@@ -386,7 +389,9 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
 
   const handleReAuditClick = async () => {
     setIsAuditing(true);
-    await onReAudit(call);
+    // Clear cached transcript so Whisper always runs fresh
+    const freshCall = { ...call, transcript: null, isRealTranscribed: false };
+    await onReAudit(freshCall);
     setIsAuditing(false);
   };
 

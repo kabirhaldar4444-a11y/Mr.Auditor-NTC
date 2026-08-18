@@ -635,14 +635,15 @@ export default function App() {
         else if (hdr[0]===0x66 && hdr[1]===0x4C && hdr[2]===0x61 && hdr[3]===0x43) { detectedExt = 'flac'; detectedMime = 'audio/flac'; }
 
         setAuditProgressStatus('Transcribing Audio via OpenAI Whisper...');
+        console.log(`[STT] Sending to Whisper — blob size: ${audioBlob.size} bytes, format: ${detectedExt}, mime: ${detectedMime}`);
 
         // Build FormData for OpenAI Whisper via openai-whisper-proxy with natural language detection
         const audioFile = new File([audioBlob], `recording.${detectedExt}`, { type: detectedMime });
         const formData = new FormData();
         formData.append('file', audioFile, `recording.${detectedExt}`);
         formData.append('model', 'whisper-1');
-        formData.append('prompt', 'Telephonic job screening candidate interview for DPR Construction. Relationship Manager from Naukri.com speaking with candidate about experience, salary, work location, PMP certifications.');
-        formData.append('temperature', '0.0'); // Deterministic sampling prevents decoder loops
+        // No prompt — Hinglish (Hindi+English) audio needs Whisper to auto-detect language
+        // Adding an English prompt causes Whisper to hallucinate the prompt text instead of transcribing speech
         formData.append('response_format', 'verbose_json');
         formData.append('timestamp_granularities[]', 'segment');
 
@@ -677,6 +678,8 @@ export default function App() {
 
         rawOpenAiResponse = await whisperRes.json();
         const fullText = (rawOpenAiResponse.text || '').trim();
+        console.log(`[STT] Whisper response — segments: ${(rawOpenAiResponse.segments || []).length}, fullText length: ${fullText.length} chars, language: ${rawOpenAiResponse.language}`);
+        console.log(`[STT] Full text preview:`, fullText.substring(0, 300));
 
         if (!fullText || fullText.length === 0) {
           const noSpeechCall = {
