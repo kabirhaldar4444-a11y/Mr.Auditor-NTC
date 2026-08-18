@@ -6,17 +6,17 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key');
 
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
-  if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
+  if (req.method !== 'POST') { res.status(405).json({ error: { message: 'Method Not Allowed' } }); return; }
 
   const apiKey = req.headers['x-api-key'] || process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
 
   if (!apiKey) {
-    res.status(400).json({ error: { message: 'OpenAI API key is missing.' } });
+    res.status(400).json({ error: { message: 'OpenAI API key is missing. Please provide x-api-key header or set OPENAI_API_KEY in Vercel environment variables.' } });
     return;
   }
 
   try {
-    // Robustly parse JSON body across all Vercel Node runtime representations (Object, String, Buffer, or Stream)
+    // 1. Safely extract body across all Vercel Node runtime environments
     let bodyData = req.body;
     if (typeof bodyData === 'string') {
       try { bodyData = JSON.parse(bodyData); } catch (_) {}
@@ -36,58 +36,46 @@ export default async function handler(req, res) {
     }
 
     if (!bodyData || typeof bodyData !== 'object') {
-      res.status(400).json({ error: { message: 'Invalid or empty JSON body received.' } });
+      res.status(400).json({ error: { message: 'Invalid or empty JSON body received by server.' } });
       return;
     }
 
     const { audio, filename, mimeType } = bodyData;
 
     if (!audio || !filename || !mimeType) {
-      res.status(400).json({ error: { message: 'Missing audio, filename, or mimeType in request body.' } });
+      res.status(400).json({ error: { message: 'Missing audio (base64), filename, or mimeType in request body.' } });
       return;
     }
 
-    // Decode base64 audio to binary buffer
+    // 2. Decode base64 audio string to Node Buffer
     const audioBuffer = Buffer.from(audio, 'base64');
 
-    // Build multipart/form-data manually
-    const boundary = `----WhisperBoundary${Date.now()}`;
-    const CRLF = '\r\n';
+    // 3. Construct native Node 18+ File and FormData objects for standard OpenAI API POST
+    const file = new File([audioBuffer], filename || 'recording.mp3', { type: mimeType || 'audio/mpeg' });
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'verbose_json');
+    formData.append('timestamp_granularities[]', 'segment');
 
-    const textPart = (name, value) =>
-      `--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}${value}${CRLF}`;
-
-    const textFields = [
-      textPart('model', 'whisper-1'),
-      textPart('response_format', 'verbose_json'),
-      textPart('timestamp_granularities[]', 'segment'),
-    ];
-
-    const textBuffer = Buffer.from(textFields.join(''), 'utf-8');
-    const fileHeader = Buffer.from(
-      `--${boundary}${CRLF}Content-Disposition: form-data; name="file"; filename="${filename || 'recording.mp3'}"${CRLF}Content-Type: ${mimeType || 'audio/mpeg'}${CRLF}${CRLF}`,
-      'utf-8'
-    );
-    const fileFooter = Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf-8');
-
-    const payloadBuffer = Buffer.concat([textBuffer, fileHeader, audioBuffer, fileFooter]);
+    console.log(`[openai-whisper-proxy] Forwarding ${audioBuffer.length} bytes to OpenAI Whisper API...`);
 
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Authorization': `Bearer ${apiKey}`
       },
-      body: payloadBuffer,
+      body: formData
     });
 
     const resContentType = whisperRes.headers.get('content-type') || 'application/json';
-    const text = await whisperRes.text();
+    const responseText = await whisperRes.text();
+
     res.setHeader('Content-Type', resContentType);
-    res.status(whisperRes.status).send(text);
+    res.status(whisperRes.status).send(responseText);
 
   } catch (err) {
     console.error('openai-whisper-proxy error:', err);
-    res.status(500).json({ error: { message: err.message || String(err) } });
+    res.status(500).json({ error: { message: err.message || 'Internal Proxy Exception', details: String(err) } });
   }
 }
