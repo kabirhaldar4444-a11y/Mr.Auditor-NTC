@@ -50,10 +50,10 @@ export default async function handler(req, res) {
     // 2. Decode base64 audio string to Node Buffer
     const audioBuffer = Buffer.from(audio, 'base64');
 
-    // 3. Construct native Node 18+ File and FormData objects for standard OpenAI API POST
-    const file = new File([audioBuffer], filename || 'recording.mp3', { type: mimeType || 'audio/mpeg' });
+    // 3. Use global Blob and FormData (supported in Node 18+ without needing File constructor)
+    const audioBlob = new Blob([audioBuffer], { type: mimeType || 'audio/mpeg' });
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', audioBlob, filename || 'recording.mp3');
     formData.append('model', 'whisper-1');
     formData.append('response_format', 'verbose_json');
     formData.append('timestamp_granularities[]', 'segment');

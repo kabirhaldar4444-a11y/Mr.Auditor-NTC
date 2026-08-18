@@ -656,7 +656,7 @@ export default function App() {
         });
 
         // Direct browser fallback if proxy endpoint fails (e.g. Vercel serverless 500)
-        if (!whisperRes.ok && apiKey && apiKey.startsWith('sk-')) {
+        if (!whisperRes.ok && apiKey) {
           console.warn(`[STT] Whisper proxy returned HTTP ${whisperRes.status}. Retrying via direct browser call to OpenAI STT API...`);
           try {
             const audioFile = new File([audioBlob], `recording.${detectedExt}`, { type: detectedMime });
