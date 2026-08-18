@@ -637,20 +637,22 @@ export default function App() {
         setAuditProgressStatus('Transcribing Audio via OpenAI Whisper...');
         console.log(`[STT] Sending to Whisper — blob size: ${audioBlob.size} bytes, format: ${detectedExt}, mime: ${detectedMime}`);
 
-        // Build FormData for OpenAI Whisper via openai-whisper-proxy with natural language detection
-        const audioFile = new File([audioBlob], `recording.${detectedExt}`, { type: detectedMime });
-        const formData = new FormData();
-        formData.append('file', audioFile, `recording.${detectedExt}`);
-        formData.append('model', 'whisper-1');
-        // No prompt — Hinglish (Hindi+English) audio needs Whisper to auto-detect language
-        // Adding an English prompt causes Whisper to hallucinate the prompt text instead of transcribing speech
-        formData.append('response_format', 'verbose_json');
-        formData.append('timestamp_granularities[]', 'segment');
+        // Convert audio blob to base64 (avoids Vercel multipart/form-data 500 errors)
+        const base64Audio = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(audioBlob);
+        });
 
         const whisperRes = await fetch('/api/openai-whisper-proxy', {
           method: 'POST',
-          headers: { 'x-api-key': apiKey },
-          body: formData
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+          body: JSON.stringify({
+            audio: base64Audio,
+            filename: `recording.${detectedExt}`,
+            mimeType: detectedMime
+          })
         });
 
         if (!whisperRes.ok) {
