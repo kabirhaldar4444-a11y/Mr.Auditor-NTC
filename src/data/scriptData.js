@@ -225,7 +225,6 @@ export const SAMPLE_INITIAL_DATA = candidateNames.map((name, i) => {
       location: i % 3 === 0 ? "Mumbai" : "Pune",
       expectedSalary: `${8 + (i % 6)} LPA`
     }),
-    isRealTranscribed: true,
     evaluation: isAudited ? {
       greetingPassed: !isFailed,
       hrIntroPassed: true,

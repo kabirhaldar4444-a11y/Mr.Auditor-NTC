@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { UploadCloud, Check, AlertCircle, Sparkles, X, Database } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { generateRealisticHinglishTranscript } from '../data/scriptData';
 
 export default function BatchUploader({ onImportData, onClose, sampleInitialRow }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -297,8 +296,7 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
         hasRedFlags: false,
         redFlagsCount: 0,
         redFlags: [],
-        transcript: generateRealisticHinglishTranscript(candidateName, agentName),
-        isRealTranscribed: true,
+        transcript: null,
         rawFields
       });
     });
