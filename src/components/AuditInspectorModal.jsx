@@ -781,7 +781,7 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
                     </div>
                   )}
 
-                  {!call.isRealTranscribed && call.complianceStatus !== 'Unanswered' && (
+                  {(!call.isRealTranscribed && (!displayTranscript || displayTranscript.length === 0)) && call.complianceStatus !== 'Unanswered' && (
                     <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left', flexShrink: 0 }}>
                       <div style={{ padding: '6px', background: '#fef3c7', color: '#b45309', borderRadius: '8px', flexShrink: 0 }}>
                         <AlertTriangle className="w-4 h-4" />
@@ -812,7 +812,7 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
 
                     {/* Stream Scrollable List */}
                     <div ref={transcriptContainerRef} style={{ flex: 1, overflowY: 'auto', paddingRight: '6px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
-                      {call.isRealTranscribed && displayTranscript && displayTranscript.length > 0 ? (
+                      {(call.isRealTranscribed || (displayTranscript && displayTranscript.length > 0)) ? (
                         displayTranscript.map((line, idx) => {
                           const lineSec = typeof line.start === 'number' ? line.start : parseTimeToSeconds(line.time);
                           const nextLine = displayTranscript[idx + 1];

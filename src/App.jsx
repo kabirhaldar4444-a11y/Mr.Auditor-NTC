@@ -49,7 +49,7 @@ const mapCallFromDb = (dbCall) => {
     callQuality: dbCall.call_quality || {},
     evaluation: dbCall.evaluation || {},
     transcript: dbCall.transcript || [],
-    isRealTranscribed: dbCall.is_real_transcribed
+    isRealTranscribed: dbCall.is_real_transcribed ?? (Array.isArray(dbCall.transcript) && dbCall.transcript.length > 0)
   };
 };
 
@@ -82,6 +82,7 @@ const mapCallToDb = (jsCall) => {
     call_quality: jsCall.callQuality || {},
     evaluation: jsCall.evaluation || {},
     transcript: jsCall.transcript || [],
+    is_real_transcribed: jsCall.isRealTranscribed ?? (Array.isArray(jsCall.transcript) && jsCall.transcript.length > 0),
   };
 };
 
