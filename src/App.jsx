@@ -701,7 +701,7 @@ export default function App() {
           return noSpeechCall;
         }
 
-        // Build 100% complete normalized transcript segments with strict prompt-repetition deduplication and STT loop purging
+        // Build 100% complete normalized transcript segments — only remove true Whisper hallucination loops
         const rawSegments = rawOpenAiResponse.segments || [];
         if (rawSegments.length > 0) {
           let prevText = '';
@@ -711,36 +711,27 @@ export default function App() {
               let txt = s.text.trim();
               if (txt.length === 0) return false;
 
-              // Purge Devanagari repeat loops (e.g. "अगर आप अगर आप", "नमक्कर नमक्कर", "परवाद", "अगर अपर")
-              const lower = txt.toLowerCase();
-              if (lower.includes('नमक्कर') || lower.includes('नमकर') || lower.includes('परवाद')) return false;
+              // Only block the exact Whisper prompt echo lines (first 1-2 segments Whisper repeats verbatim)
+              if (txt === 'Telephonic job screening candidate interview for DPR Construction. Relationship Manager from Naukri.com speaking with candidate about experience, salary, work location, PMP certifications.') return false;
+              if (txt === 'Naukri.com, DPR Construction, Relationship Manager, Mumbai BKC, PMP, OSHA, Primavera P6, AutoCAD.') return false;
 
-              // Check if segment is composed of repeating Devanagari words like "अगर आप अगर आप"
-              if (/\b(अगर|आप|अपर)\b/.test(txt)) {
-                const matches = txt.match(/\b(अगर|आप|अपर)\b/g);
-                if (matches && matches.length >= 3) {
-                  return false; // PURGE THIS DEVANAGARI REPEAT SEGMENT COMPLETELY!
-                }
-              }
-
-              // Check generic word frequency repeat loops
+              // Only block TRUE hallucination loops: the same single word repeated 6+ times in the segment
               const words = txt.split(/\s+/);
-              if (words.length >= 3) {
+              if (words.length >= 6) {
                 const wordFreq = {};
                 let maxRepeat = 0;
                 for (const w of words) {
                   const cleanW = w.toLowerCase().replace(/[^\w\u0900-\u097F]/g, '');
-                  if (!cleanW) continue;
+                  if (!cleanW || cleanW.length < 2) continue;
                   wordFreq[cleanW] = (wordFreq[cleanW] || 0) + 1;
                   if (wordFreq[cleanW] > maxRepeat) maxRepeat = wordFreq[cleanW];
                 }
-                if (maxRepeat >= 3 && (maxRepeat / words.length) >= 0.35) {
-                  return false; // PURGE REPEATING TOKEN LOOPS COMPLETELY!
-                }
+                // Only purge if a single word dominates >60% of all words (true looping hallucination)
+                if (maxRepeat >= 5 && (maxRepeat / words.length) >= 0.6) return false;
               }
 
-              if (txt.includes('Transcribe verbatim') || txt.includes('Naukri.com, DPR Construction')) return false;
-              if (txt.toLowerCase() === prevText.toLowerCase()) return false; // skip consecutive exact duplicate
+              // Skip only consecutive exact duplicates (real loop artifact)
+              if (txt.toLowerCase() === prevText.toLowerCase()) return false;
               prevText = txt;
               s.cleanedText = txt;
               return true;

@@ -107,10 +107,20 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
     if (!call.transcript || !Array.isArray(call.transcript)) return [];
     return call.transcript.filter(line => {
       if (!line || !line.text) return false;
-      const txt = line.text;
-      if (/\b(अगर|आप|अपर|नमक्कर|नमकर|परवाद)\b/.test(txt)) {
-        const matches = txt.match(/\b(अगर|आप|अपर|नमक्कर|नमकर|परवाद)\b/g);
-        if (matches && matches.length >= 2) return false;
+      const txt = line.text.trim();
+      if (txt.length === 0) return false;
+      // Only remove pure hallucination loops where a single word dominates >60% of segment
+      const words = txt.split(/\s+/);
+      if (words.length >= 6) {
+        const freq = {};
+        let max = 0;
+        for (const w of words) {
+          const k = w.toLowerCase().replace(/[^\w\u0900-\u097F]/g, '');
+          if (!k || k.length < 2) continue;
+          freq[k] = (freq[k] || 0) + 1;
+          if (freq[k] > max) max = freq[k];
+        }
+        if (max >= 5 && (max / words.length) >= 0.6) return false;
       }
       return true;
     });
