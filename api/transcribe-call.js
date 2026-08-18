@@ -153,30 +153,38 @@ export default async function handler(req, res) {
     else if (buffer[0]===0x1A && buffer[1]===0x45 && buffer[2]===0xDF && buffer[3]===0xA3) { ext = 'webm'; mime = 'audio/webm'; }
 
     console.log(`[transcribe-call] Audio detected as ${ext.toUpperCase()}, size=${buffer.length} bytes`);
+    console.log('[transcribe-call] Building multipart payload for OpenAI Whisper API...');
 
-    // Construct FormData for OpenAI STT API
-    // KEY ACCURACY SETTINGS:
-    // - NO language forced: Whisper auto-detects Hindi/Hinglish/English naturally.
-    //   Forcing 'hi' causes English words to be incorrectly transliterated into Devanagari.
-    // - temperature=0: Deterministic, no hallucination/guessing. Most accurate output.
-    // - response_format=verbose_json: Required for segment timestamps.
-    // - timestamp_granularities[]=segment + word: Gives both sentence-level and word-level timestamps.
-    const formData = new FormData();
-    const blob = new Blob([buffer], { type: mime });
-    formData.append('file', blob, `recording.${ext}`);
-    formData.append('model', 'whisper-1');
-    formData.append('prompt', 'Naukri.com, DPR Construction, Relationship Manager, Mumbai BKC, PMP, OSHA, Primavera P6, AutoCAD.');
-    formData.append('temperature', '0.0');
-    formData.append('response_format', 'verbose_json');
-    formData.append('timestamp_granularities[]', 'segment');
+    // Build multipart/form-data payload manually using raw Buffers
+    // (FormData + Blob are unreliable in Vercel Node.js 18 serverless runtime)
+    const boundary = `----WhisperFormBoundary${Date.now()}`;
+    const CRLF = '\r\n';
 
-    console.log('[transcribe-call] Sending audio to OpenAI Speech-to-Text API (auto-language, temp=0, segment+word timestamps)...');
+    const textPart = (name, value) =>
+      `--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}${value}${CRLF}`;
+
+    const textFields = [
+      textPart('model', 'whisper-1'),
+      textPart('response_format', 'verbose_json'),
+      textPart('timestamp_granularities[]', 'segment'),
+    ];
+
+    const textBuffer = Buffer.from(textFields.join(''), 'utf-8');
+    const fileHeader = Buffer.from(
+      `--${boundary}${CRLF}Content-Disposition: form-data; name="file"; filename="recording.${ext}"${CRLF}Content-Type: ${mime}${CRLF}${CRLF}`,
+      'utf-8'
+    );
+    const fileFooter = Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf-8');
+    const payloadBuffer = Buffer.concat([textBuffer, fileHeader, buffer, fileFooter]);
+
+    console.log(`[transcribe-call] Sending ${payloadBuffer.length} byte multipart payload to OpenAI Whisper...`);
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
       },
-      body: formData
+      body: payloadBuffer,
     });
 
     if (!whisperRes.ok) {
