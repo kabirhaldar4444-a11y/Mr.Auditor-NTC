@@ -1,7 +1,30 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
+
+// ─── Load .env into process.env for server-side Vite middleware ───────────────
+// Vite only injects VITE_* vars into import.meta.env (browser bundle).
+// Server-side handlers (transcribe-call.js) use process.env, so we must
+// manually load .env values here so they are available during local dev.
+const envFilePath = path.resolve(process.cwd(), '.env');
+if (fs.existsSync(envFilePath)) {
+  const envContent = fs.readFileSync(envFilePath, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const value = trimmed.slice(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+    if (key && !process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 let cachedCookie = '';
 const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
