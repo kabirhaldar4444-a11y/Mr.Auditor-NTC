@@ -537,124 +537,31 @@ export default function App() {
     let rawOpenAiResponse = callToAudit.rawOpenAiResponse || null;
 
     try {
-      // STEP 1: Download audio via audio-proxy then send to OpenAI Whisper
+      // STEP 1: Full server-side transcription via /api/transcribe-call
+      // Downloads audio from SlashRTC & sends to OpenAI Whisper — all server-to-server
+      // Works on both localhost and Vercel without any CORS or proxy issues
       if (callToAudit.audioUrl && (!currentCallTranscript || !isRealTranscribed)) {
-        setAuditProgressStatus('Downloading Audio from SlashRTC...');
+        setAuditProgressStatus('Downloading & Transcribing Audio (Server-Side)...');
+        console.log(`[STT] Calling /api/transcribe-call for audioUrl: ${callToAudit.audioUrl}`);
 
-        let audioBlob = null;
-        let audioFetchError = null;
-
-        // Download through audio-proxy — same endpoint the audio player uses
-        const audioProxyUrl = `/api/audio-proxy?url=${encodeURIComponent(callToAudit.audioUrl)}&username=${encodeURIComponent(username || '')}&password=${encodeURIComponent(password || '')}&portalUrl=${encodeURIComponent(portalUrl || '')}&sessionCookie=${encodeURIComponent(slashRtcCookie || '')}`;
-        console.log(`[STT] Downloading audio via proxy: ${audioProxyUrl}`);
-
-        try {
-          const proxyRes = await fetch(audioProxyUrl);
-          console.log(`[STT] Proxy response: HTTP ${proxyRes.status}, content-type: ${proxyRes.headers.get('content-type')}`);
-
-          if (!proxyRes.ok) {
-            const errBody = await proxyRes.text().catch(() => '');
-            audioFetchError = errBody || `Proxy returned HTTP ${proxyRes.status}. Check Settings: username/password/portalUrl.`;
-          } else {
-            const blob = await proxyRes.blob();
-            console.log(`[STT] Blob size: ${blob.size} bytes, type: ${blob.type}`);
-
-            if (blob.size >= 1000) {
-              // Check first bytes — reject HTML
-              const peek = await blob.slice(0, 4).arrayBuffer();
-              const first = new Uint8Array(peek)[0];
-              if (first === 0x3C) { // '<'
-                audioFetchError = 'Proxy returned HTML login page. SlashRTC session expired — re-enter credentials in Settings.';
-              } else {
-                audioBlob = blob;
-              }
-            } else {
-              audioFetchError = `Audio blob too small (${blob.size} bytes). SlashRTC recording was not saved or URL is invalid.`;
-            }
-          }
-        } catch (e) {
-          audioFetchError = `Fetch error: ${e.message}`;
-          console.error(`[STT] Proxy fetch exception:`, e);
-        }
-
-        // Validate audio blob
-        if (!audioBlob || audioBlob.size < 1000) {
-          const failedCall = {
-            ...callToAudit,
-            status: 'Failed',
-            complianceStatus: 'TRANSCRIPTION_FAILED',
-            overallScore: null,
-            transcript: null,
-            isRealTranscribed: false,
-            evaluation: {
-              feedback: audioFetchError
-                ? `Audio download failed: ${audioFetchError}`
-                : 'Downloaded audio file is empty or corrupted (< 1KB). The SlashRTC recording may not have been saved.'
-            }
-          };
-          const supabase = getSupabaseClient();
-          if (supabase) { try { await supabase.from('calls').upsert(mapCallToDb(failedCall)); } catch (_) {} }
-          setCalls((prev) => prev.map(c => c.id === callToAudit.id ? failedCall : c));
-          if (selectedCall && selectedCall.id === callToAudit.id) setSelectedCall(failedCall);
-          setIsAuditingId(null);
-          setAuditProgressStatus('');
-          return failedCall;
-        }
-
-        // Check audio blob header for HTML (login redirect)
-        const headerBuf = await audioBlob.slice(0, 4).arrayBuffer();
-        const hdr = new Uint8Array(headerBuf);
-        if (hdr[0] === 0x3C) { // '<' = HTML page
-          const failedCall = {
-            ...callToAudit,
-            status: 'Failed',
-            complianceStatus: 'TRANSCRIPTION_FAILED',
-            overallScore: null,
-            transcript: null,
-            isRealTranscribed: false,
-            evaluation: {
-              feedback: 'SlashRTC returned a login page instead of audio. Please log in to SlashRTC portal and try again.'
-            }
-          };
-          const supabase = getSupabaseClient();
-          if (supabase) { try { await supabase.from('calls').upsert(mapCallToDb(failedCall)); } catch (_) {} }
-          setCalls((prev) => prev.map(c => c.id === callToAudit.id ? failedCall : c));
-          if (selectedCall && selectedCall.id === callToAudit.id) setSelectedCall(failedCall);
-          setIsAuditingId(null);
-          setAuditProgressStatus('');
-          return failedCall;
-        }
-
-        // Detect audio format from magic bytes
-        let detectedExt = 'wav';
-        let detectedMime = 'audio/wav';
-        if (hdr[0]===0x52 && hdr[1]===0x49 && hdr[2]===0x46 && hdr[3]===0x46) { detectedExt = 'wav'; detectedMime = 'audio/wav'; }
-        else if (hdr[0]===0x49 && hdr[1]===0x44 && hdr[2]===0x33) { detectedExt = 'mp3'; detectedMime = 'audio/mpeg'; }
-        else if (hdr[0]===0xFF && (hdr[1] & 0xE0)===0xE0) { detectedExt = 'mp3'; detectedMime = 'audio/mpeg'; }
-        else if (hdr[0]===0x4F && hdr[1]===0x67 && hdr[2]===0x67 && hdr[3]===0x53) { detectedExt = 'ogg'; detectedMime = 'audio/ogg'; }
-        else if (hdr[0]===0x66 && hdr[1]===0x4C && hdr[2]===0x61 && hdr[3]===0x43) { detectedExt = 'flac'; detectedMime = 'audio/flac'; }
-
-        setAuditProgressStatus('Transcribing Audio via OpenAI Whisper...');
-        console.log(`[STT] Sending to Whisper directly — blob size: ${audioBlob.size} bytes, format: ${detectedExt}`);
-
-        // Call OpenAI Whisper API directly from browser with FormData (CORS supported, no proxy needed)
-        const audioFile = new File([audioBlob], `recording.${detectedExt}`, { type: detectedMime });
-        const formData = new FormData();
-        formData.append('file', audioFile, `recording.${detectedExt}`);
-        formData.append('model', 'whisper-1');
-        formData.append('response_format', 'verbose_json');
-        formData.append('timestamp_granularities[]', 'segment');
-
-        const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        const transcribeRes = await fetch('/api/transcribe-call', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${apiKey}` },
-          body: formData
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+          body: JSON.stringify({
+            audioUrl: callToAudit.audioUrl,
+            username: username || '',
+            password: password || '',
+            portalUrl: portalUrl || '',
+            sessionCookie: slashRtcCookie || ''
+          })
         });
 
-        if (!whisperRes.ok) {
-          const errText = await whisperRes.text();
-          let errMsg = `Whisper transcription failed (HTTP ${whisperRes.status})`;
-          try { errMsg = JSON.parse(errText).error?.message || errMsg; } catch (_) {}
+        console.log(`[STT] /api/transcribe-call response: HTTP ${transcribeRes.status}`);
+
+        if (!transcribeRes.ok) {
+          const errText = await transcribeRes.text().catch(() => '');
+          let errMsg = `Transcription service error (HTTP ${transcribeRes.status})`;
+          try { errMsg = JSON.parse(errText).error || errMsg; } catch (_) {}
 
           const failedCall = {
             ...callToAudit,
@@ -674,101 +581,30 @@ export default function App() {
           return failedCall;
         }
 
-        rawOpenAiResponse = await whisperRes.json();
-        const fullText = (rawOpenAiResponse.text || '').trim();
-        console.log(`[STT] Whisper response — segments: ${(rawOpenAiResponse.segments || []).length}, fullText length: ${fullText.length} chars, language: ${rawOpenAiResponse.language}`);
-        console.log(`[STT] Full text preview:`, fullText.substring(0, 300));
+        const transcribeData = await transcribeRes.json();
+        console.log(`[STT] Transcription status: ${transcribeData.status}, segments: ${(transcribeData.transcript || []).length}, language: ${transcribeData.detectedLanguage}`);
 
-        if (!fullText || fullText.length === 0) {
-          const noSpeechCall = {
+        if (transcribeData.status !== 'COMPLETED' || !transcribeData.transcript || transcribeData.transcript.length === 0) {
+          const failedCall = {
             ...callToAudit,
-            transcript: null,
-            rawOpenAiResponse,
-            isRealTranscribed: true,
-            status: 'Audited',
+            status: 'Failed',
+            complianceStatus: 'TRANSCRIPTION_FAILED',
             overallScore: null,
-            complianceStatus: 'No Speech',
-            hasRedFlags: false,
-            redFlagsCount: 0,
-            redFlags: [],
-            evaluation: { feedback: 'Audio transcribed successfully but contained no transcribable speech.' }
+            transcript: null,
+            isRealTranscribed: false,
+            evaluation: { feedback: transcribeData.error || transcribeData.message || 'Transcription returned no speech segments.' }
           };
           const supabase = getSupabaseClient();
-          if (supabase) { try { await supabase.from('calls').upsert(mapCallToDb(noSpeechCall)); } catch (_) {} }
-          setCalls((prev) => prev.map(c => c.id === callToAudit.id ? noSpeechCall : c));
-          if (selectedCall && selectedCall.id === callToAudit.id) setSelectedCall(noSpeechCall);
+          if (supabase) { try { await supabase.from('calls').upsert(mapCallToDb(failedCall)); } catch (_) {} }
+          setCalls((prev) => prev.map(c => c.id === callToAudit.id ? failedCall : c));
+          if (selectedCall && selectedCall.id === callToAudit.id) setSelectedCall(failedCall);
           setIsAuditingId(null);
           setAuditProgressStatus('');
-          return noSpeechCall;
+          return failedCall;
         }
 
-        // Build 100% complete normalized transcript segments — only remove true Whisper hallucination loops
-        const rawSegments = rawOpenAiResponse.segments || [];
-        if (rawSegments.length > 0) {
-          let prevText = '';
-          currentCallTranscript = rawSegments
-            .filter(s => {
-              if (!s.text) return false;
-              let txt = s.text.trim();
-              if (txt.length === 0) return false;
-
-              // Only block the exact Whisper prompt echo lines (first 1-2 segments Whisper repeats verbatim)
-              if (txt === 'Telephonic job screening candidate interview for DPR Construction. Relationship Manager from Naukri.com speaking with candidate about experience, salary, work location, PMP certifications.') return false;
-              if (txt === 'Naukri.com, DPR Construction, Relationship Manager, Mumbai BKC, PMP, OSHA, Primavera P6, AutoCAD.') return false;
-
-              // Only block TRUE hallucination loops: the same single word repeated 6+ times in the segment
-              const words = txt.split(/\s+/);
-              if (words.length >= 6) {
-                const wordFreq = {};
-                let maxRepeat = 0;
-                for (const w of words) {
-                  const cleanW = w.toLowerCase().replace(/[^\w\u0900-\u097F]/g, '');
-                  if (!cleanW || cleanW.length < 2) continue;
-                  wordFreq[cleanW] = (wordFreq[cleanW] || 0) + 1;
-                  if (wordFreq[cleanW] > maxRepeat) maxRepeat = wordFreq[cleanW];
-                }
-                // Only purge if a single word dominates >60% of all words (true looping hallucination)
-                if (maxRepeat >= 5 && (maxRepeat / words.length) >= 0.6) return false;
-              }
-
-              // Skip only consecutive exact duplicates (real loop artifact)
-              if (txt.toLowerCase() === prevText.toLowerCase()) return false;
-              prevText = txt;
-              s.cleanedText = txt;
-              return true;
-            })
-            .map(s => {
-              const hasStart = typeof s.start === 'number' && !isNaN(s.start);
-              const hasEnd = typeof s.end === 'number' && !isNaN(s.end);
-              const startSec = hasStart ? s.start : null;
-              const mins = startSec !== null ? Math.floor(startSec / 60) : null;
-              const secs = startSec !== null ? Math.floor(startSec % 60) : null;
-              const timeStr = startSec !== null
-                ? `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-                : 'Unavailable';
-
-              const speakerName = (s.speaker && typeof s.speaker === 'string' && s.speaker.trim())
-                ? s.speaker.trim()
-                : 'Unknown';
-
-              return {
-                speaker: speakerName,
-                start: startSec,
-                end: hasEnd ? s.end : null,
-                time: timeStr,
-                text: s.cleanedText || s.text.trim()
-              };
-            });
-        } else {
-          currentCallTranscript = [{
-            speaker: 'Unknown',
-            start: 0,
-            end: null,
-            time: '00:00',
-            text: fullText
-          }];
-        }
-
+        currentCallTranscript = transcribeData.transcript;
+        rawOpenAiResponse = transcribeData.rawOpenAiResponse || null;
         isRealTranscribed = true;
       }
 

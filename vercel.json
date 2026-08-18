@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/openai-whisper-proxy.js": { "maxDuration": 60 },
-    "api/audio-proxy.js": { "maxDuration": 30 }
+    "api/audio-proxy.js": { "maxDuration": 30 },
+    "api/transcribe-call.js": { "maxDuration": 120 }
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
