@@ -183,65 +183,7 @@ const candidateNames = [
 const agentNames = ["Naukri Vikalp", "Ananya Sharma", "Rahul Verma", "Priya Singh", "Amit Kumar"];
 const campaignList = ["NTC", "CRLA", "CRLB", "CRLD", "CRM", "NLPC", "CRMFC"];
 
-export const SAMPLE_INITIAL_DATA = candidateNames.map((name, i) => {
-  const numStr = String(i + 1).padStart(3, '0');
-  const agent = agentNames[i % agentNames.length];
-  const campaignName = campaignList[i % campaignList.length];
-  const isFailed = (i % 7 === 1);
-  const isAudited = (i % 2 === 0);
-  
-  return {
-    id: `CALL-2026-0807-${numStr}`,
-    callDate: `08/07/26 ${17 - Math.floor(i / 4)}:${Math.abs(55 - (i * 7) % 60).toString().padStart(2, '0')}`,
-    callerId: `${2498500 + i}`,
-    agentName: agent,
-    agentCode: agent.split(' ')[0].toUpperCase() + '01',
-    campaign: campaignName,
-    queue: `${campaignName}_Process`,
-    duration: `0:0${3 + (i % 3)}:${(15 + (i * 9) % 45).toString().padStart(2, '0')}`,
-    talkTime: `0:0${3 + (i % 3)}:${(10 + (i * 9) % 45).toString().padStart(2, '0')}`,
-    holdTime: "0:00:05",
-    callType: "Candidate Screening / Job Pitch",
-    disposition: isFailed ? "COMPLIANCE_FAILED" : "INTERESTED_AUDITED",
-    candidateName: name,
-    candidateEmail: `${name.toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
-    campaignStage: isFailed ? "Failed_Review" : "Initial_Screening_Pass",
-    audioUrl: `https://aramcoindia.slashrtc.in/index.php/download/generateLink/recording/dpr-call-${numStr}/play/${9964757500 + i}/2026-08-07/out/false`,
-    audioStatus: "ACTIVE_SLASH_LINK",
-    status: isAudited ? "Audited" : "Pending",
-    overallScore: isAudited ? (isFailed ? 45 : 95 + (i % 6)) : 0,
-    complianceStatus: isAudited ? (isFailed ? "Critical Fail" : "Passed") : "Pending",
-    hasRedFlags: isAudited && isFailed,
-    redFlagsCount: isAudited && isFailed ? 1 : 0,
-    redFlags: isAudited && isFailed ? [
-      {
-        code: "RF_USED_SIR_MAAM",
-        severity: "MEDIUM",
-        title: "Used Formal Title (Sir/Ma'am)",
-        snippet: "Agent addressed candidate as 'Sir' during call introduction."
-      }
-    ] : [],
-    transcript: generateRealisticHinglishTranscript(name, agent, {
-      experience: `${5 + (i % 8)} years`,
-      currentTitle: i % 2 === 0 ? "Planning Engineer" : "Safety Officer",
-      location: i % 3 === 0 ? "Mumbai" : "Pune",
-      expectedSalary: `${8 + (i % 6)} LPA`
-    }),
-    evaluation: isAudited ? {
-      greetingPassed: !isFailed,
-      hrIntroPassed: true,
-      eligibilityPassed: true,
-      companyOverviewPassed: true,
-      screeningQuestionsPassed: true,
-      globalPitchPassed: true,
-      behavioralPassed: true,
-      certificationsPassed: true,
-      joiningBonusPassed: true,
-      websiteRedirectPassed: true,
-      feedback: isFailed ? "Used formal title Sir/Ma'am." : "Excellent compliance. All checkpoints verified."
-    } : null
-  };
-});
+export const SAMPLE_INITIAL_DATA = [];
 
 
 export const PDF_SCRIPT_LINES = [

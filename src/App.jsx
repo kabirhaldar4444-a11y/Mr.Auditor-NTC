@@ -283,9 +283,8 @@ const sanitizeCalls = (rawCalls) => {
     return updatedCall;
   });
 };
-
 export default function App() {
-  const [calls, setCalls] = useState(() => sanitizeCalls(SAMPLE_INITIAL_DATA));
+  const [calls, setCalls] = useState([]);
   const [selectedCall, setSelectedCall] = useState(null);
   
   // Navigation View Selection
@@ -401,7 +400,7 @@ export default function App() {
       
       const supabase = getSupabaseClient();
       if (!supabase) {
-        setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
+        setCalls([]);
         setIsDbLoading(false);
         return;
       }
@@ -424,7 +423,7 @@ export default function App() {
             console.error("Supabase load error on page", page, error);
             if (page === 0) {
               setDbError(error.message);
-              setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
+              setCalls([]);
             }
             break;
           }
@@ -438,27 +437,17 @@ export default function App() {
         if (allDbRows.length > 0) {
           setCalls(sanitizeCalls(allDbRows.map(mapCallFromDb)));
         } else {
-          console.log("Supabase table is empty. Seeding initial demo data...");
-          const dbRows = SAMPLE_INITIAL_DATA.map(mapCallToDb);
-          const { error: seedError } = await supabase.from('calls').insert(dbRows);
-          
-          if (seedError) {
-            console.error("Failed to seed initial data to Supabase:", seedError);
-            setDbError(seedError.message);
-            setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
-          } else {
-            setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
-          }
+          setCalls([]);
         }
       } catch (err) {
         console.error("Unexpected error loading calls:", err);
         setDbError(err.message || String(err));
-        setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
+        setCalls([]);
       } finally {
         setIsDbLoading(false);
       }
     };
-    
+
     loadCalls();
   }, [supabaseConfigured]);
 

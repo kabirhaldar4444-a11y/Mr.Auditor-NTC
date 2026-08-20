@@ -9,6 +9,8 @@ import CallTable from './CallTable';
 
 export const MANDATORY_CAMPAIGN_ROOMS = [
   'NTC',
+  'ISN',
+  'HRDPMI',
   'CRLA',
   'CRLB',
   'CRLD',
@@ -17,36 +19,69 @@ export const MANDATORY_CAMPAIGN_ROOMS = [
   'CRMFC'
 ];
 
-// Helper to resolve room names cleanly to strictly one of the 7 official campaign rooms
-const resolveRoomName = (callOrName) => {
-  let combined = '';
+// Helper to resolve room names cleanly and strictly to their true campaign room
+export const resolveRoomName = (callOrName) => {
+  if (!callOrName) return 'NTC';
+  
+  let rawCampaign = '';
+  let rawProcess = '';
+  let rawQueue = '';
+  
   if (typeof callOrName === 'string') {
-    combined = callOrName;
-  } else if (callOrName && typeof callOrName === 'object') {
-    combined = [
-      callOrName.campaign,
-      callOrName.CAMPAIGN,
-      callOrName.process,
-      callOrName.PROCESS,
-      callOrName.queue,
-      callOrName.QUEUE,
-      callOrName.campaignStage,
-      callOrName.jobTitle,
-      callOrName.agentCode,
-      callOrName.agentName,
-      callOrName.rawFields ? Object.values(callOrName.rawFields).join(' ') : ''
-    ].filter(Boolean).join(' ');
+    rawCampaign = callOrName;
+  } else if (typeof callOrName === 'object') {
+    rawCampaign = callOrName.campaign || (callOrName.rawFields && (callOrName.rawFields['CAMPAIGN'] || callOrName.rawFields['Campaign'] || callOrName.rawFields['CAMPAIGN NAME'])) || '';
+    rawProcess = callOrName.process || callOrName.queue || (callOrName.rawFields && (callOrName.rawFields['PROCESS'] || callOrName.rawFields['Process'])) || '';
+    rawQueue = callOrName.queue || (callOrName.rawFields && (callOrName.rawFields['QUEUE'] || callOrName.rawFields['Queue'])) || '';
   }
-  
-  const upper = String(combined || '').toUpperCase();
-  
-  if (upper.includes('CRMFC')) return 'CRMFC';
-  if (upper.includes('CRLA')) return 'CRLA';
-  if (upper.includes('CRLB')) return 'CRLB';
-  if (upper.includes('CRLD')) return 'CRLD';
-  if (upper.includes('NLPC')) return 'NLPC';
-  if (upper.includes('CRM')) return 'CRM';
-  if (upper.includes('NTC')) return 'NTC';
+
+  const cleanCamp = String(rawCampaign).trim().toUpperCase();
+  const cleanProc = String(rawProcess).trim().toUpperCase();
+  const cleanQueue = String(rawQueue).trim().toUpperCase();
+  const combined = `${cleanCamp} ${cleanProc} ${cleanQueue}`.trim();
+
+  // 1. ISN Campaign Check
+  if (cleanCamp === 'ISN' || cleanCamp.startsWith('ISN') || cleanProc.startsWith('ISN') || combined.includes('ISNAHMEDABAD') || combined.includes('ISN')) {
+    return 'ISN';
+  }
+
+  // 2. HRDPMI / PMI / DPMI Campaign Check
+  if (cleanCamp === 'HRDPMI' || cleanCamp === 'PMI' || cleanCamp === 'DPMI' || cleanProc.includes('HRDPMI') || combined.includes('HRDPMI') || combined.includes('DPMI')) {
+    return 'HRDPMI';
+  }
+
+  // 3. CRMFC / CRLA / CRLB / CRLD Checks
+  if (cleanCamp === 'CRMFC' || combined.includes('CRMFC')) {
+    return 'CRMFC';
+  }
+  if (cleanCamp === 'CRLA' || combined.includes('CRLA')) {
+    return 'CRLA';
+  }
+  if (cleanCamp === 'CRLB' || combined.includes('CRLB')) {
+    return 'CRLB';
+  }
+  if (cleanCamp === 'CRLD' || combined.includes('CRLD')) {
+    return 'CRLD';
+  }
+
+  // 4. NLPC / CRM / NTC Checks
+  if (cleanCamp === 'NLPC' || combined.includes('NLPC')) {
+    return 'NLPC';
+  }
+  if (cleanCamp === 'CRM' || combined.includes('CRM')) {
+    return 'CRM';
+  }
+  if (cleanCamp === 'NTC' || combined.includes('NTC')) {
+    return 'NTC';
+  }
+
+  // 5. Dynamic Campaign name if explicitly provided in dataset
+  if (cleanCamp && cleanCamp !== 'GENERAL' && cleanCamp !== '--' && cleanCamp !== 'UNDEFINED') {
+    return cleanCamp;
+  }
+  if (cleanProc && cleanProc !== 'GENERAL' && cleanProc !== '--' && cleanProc !== 'UNDEFINED') {
+    return cleanProc;
+  }
 
   return 'NTC';
 };
@@ -54,6 +89,15 @@ const resolveRoomName = (callOrName) => {
 // Helper for dynamic campaign theme colors
 const getCampaignGradient = (name) => {
   const n = String(name || '').toUpperCase();
+  if (n === 'ISN' || n.includes('ISN')) {
+    return { bg: 'from-blue-600 to-indigo-700', text: 'text-blue-600', lightBg: 'bg-blue-50', border: 'border-blue-200' };
+  }
+  if (n === 'HRDPMI' || n.includes('PMI') || n.includes('DPMI')) {
+    return { bg: 'from-purple-600 to-fuchsia-700', text: 'text-purple-600', lightBg: 'bg-purple-50', border: 'border-purple-200' };
+  }
+  if (n === 'NTC' || n.includes('NTC')) {
+    return { bg: 'from-teal-600 to-emerald-700', text: 'text-teal-600', lightBg: 'bg-teal-50', border: 'border-teal-200' };
+  }
   if (n.includes('CRMFC')) {
     return { bg: 'from-amber-500 to-orange-600', text: 'text-amber-600', lightBg: 'bg-amber-50', border: 'border-amber-200' };
   }
@@ -72,7 +116,7 @@ const getCampaignGradient = (name) => {
   if (n.includes('NLPC')) {
     return { bg: 'from-rose-500 to-pink-600', text: 'text-rose-600', lightBg: 'bg-rose-50', border: 'border-rose-200' };
   }
-  return { bg: 'from-blue-600 to-indigo-600', text: 'text-blue-600', lightBg: 'bg-blue-50', border: 'border-blue-200' };
+  return { bg: 'from-slate-700 to-indigo-800', text: 'text-indigo-600', lightBg: 'bg-indigo-50', border: 'border-indigo-200' };
 };
 
 export default function CampaignRoomsView({
@@ -89,12 +133,20 @@ export default function CampaignRoomsView({
   const [selectedRoom, setSelectedRoom] = useState(initialCampaignRoom);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Compute statistics strictly for the 7 official campaign rooms
+  // Compute statistics strictly partitioned for each campaign room
   const campaignRooms = useMemo(() => {
     const roomsMap = {};
 
-    // 1. Initialize strictly the 7 campaign rooms
-    MANDATORY_CAMPAIGN_ROOMS.forEach((name) => {
+    // 1. Initialize canonical campaign rooms
+    const allDiscoveredRoomNames = new Set(MANDATORY_CAMPAIGN_ROOMS);
+    
+    // 2. Discover any additional campaign names present in uploaded calls
+    calls.forEach(c => {
+      const rName = resolveRoomName(c);
+      if (rName) allDiscoveredRoomNames.add(rName);
+    });
+
+    Array.from(allDiscoveredRoomNames).forEach((name) => {
       roomsMap[name] = {
         name,
         calls: [],
@@ -108,10 +160,9 @@ export default function CampaignRoomsView({
       };
     });
 
-    // 2. Aggregate calls into the 7 rooms
+    // 3. Aggregate calls strictly into their resolved room (no cross-contamination)
     calls.forEach((c) => {
       const roomName = resolveRoomName(c);
-      
       const room = roomsMap[roomName] || roomsMap['NTC'];
       room.calls.push(c);
 
@@ -142,7 +193,7 @@ export default function CampaignRoomsView({
       }
     });
 
-    return MANDATORY_CAMPAIGN_ROOMS.map((name) => {
+    return Array.from(allDiscoveredRoomNames).map((name) => {
       const room = roomsMap[name];
       const avgScore = room.scoreCount > 0 ? Math.round(room.totalScoreSum / room.scoreCount) : null;
       const passRate = room.auditedCount > 0 ? Math.round((room.passedCount / room.auditedCount) * 100) : (room.calls.length > 0 ? 0 : 100);
