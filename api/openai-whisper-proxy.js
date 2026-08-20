@@ -8,7 +8,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: { message: 'Method Not Allowed' } }); return; }
 
-  const apiKey = req.headers['x-api-key'] || process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
+  const clientKey = (req.headers['x-api-key'] || '').trim();
+  const apiKey = (clientKey && clientKey.startsWith('sk-'))
+    ? clientKey
+    : (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '');
 
   if (!apiKey) {
     res.status(400).json({ error: { message: 'OpenAI API key is missing. Please provide x-api-key header or set OPENAI_API_KEY in Vercel environment variables.' } });
@@ -40,7 +43,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const { audio, filename, mimeType } = bodyData;
+    const { audio, filename, mimeType, language, prompt } = bodyData;
 
     if (!audio || !filename || !mimeType) {
       res.status(400).json({ error: { message: 'Missing audio (base64), filename, or mimeType in request body.' } });
@@ -52,11 +55,17 @@ export default async function handler(req, res) {
 
     // 3. Use global Blob and FormData (supported in Node 18+ without needing File constructor)
     const audioBlob = new Blob([audioBuffer], { type: mimeType || 'audio/mpeg' });
+    const defaultPrompt = "This is an Indian telecalling screening conversation in Hindi, Hinglish, and English. The agent and candidate discuss job opportunities, candidate qualifications, interview process, salary, and company details. Common words: Hello, Haanji, Namaste, Sir, Madam, Interview, Call record, NTC, Details, Selection, Resume, Company, Location.";
+
     const formData = new FormData();
     formData.append('file', audioBlob, filename || 'recording.mp3');
     formData.append('model', 'whisper-1');
     formData.append('response_format', 'verbose_json');
     formData.append('timestamp_granularities[]', 'segment');
+    formData.append('prompt', prompt || defaultPrompt);
+    if (language && language !== 'auto') {
+      formData.append('language', language);
+    }
 
     console.log(`[openai-whisper-proxy] Forwarding ${audioBuffer.length} bytes to OpenAI Whisper API...`);
 

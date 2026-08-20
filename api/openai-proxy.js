@@ -6,7 +6,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
   if (req.method !== 'POST') { res.status(405).send('Method Not Allowed'); return; }
 
-  const apiKey = req.headers['x-api-key'] || process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
+  const clientKey = (req.headers['x-api-key'] || '').trim();
+  const apiKey = (clientKey && clientKey.startsWith('sk-'))
+    ? clientKey
+    : (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '');
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;

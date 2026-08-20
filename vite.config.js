@@ -114,8 +114,11 @@ async function fetchAudioWithCookie(audioUrl, cookieHeader, portalUrl) {
   });
 }
 
-// https://vite.dev/config/
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_OPENAI_API_KEY': JSON.stringify(process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY || ''),
+    'import.meta.env.OPENAI_API_KEY': JSON.stringify(process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '')
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -167,7 +170,11 @@ export default defineConfig({
               let bodyText = '';
               req.on('data', chunk => { bodyText += chunk; });
               req.on('end', async () => {
-                const openaiKey = req.headers['x-api-key'] || '';
+                const headerKey = (req.headers['x-api-key'] || '').trim();
+                const openaiKey = (headerKey && headerKey.startsWith('sk-'))
+                  ? headerKey
+                  : (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '');
+
                 const url = `https://api.openai.com/v1/chat/completions`;
                 
                 const openaiResponse = await fetch(url, {
@@ -196,7 +203,11 @@ export default defineConfig({
               let chunks = [];
               req.on('data', chunk => chunks.push(chunk));
               req.on('end', async () => {
-                const openaiKey = req.headers['x-api-key'] || '';
+                const headerKey = (req.headers['x-api-key'] || '').trim();
+                const openaiKey = (headerKey && headerKey.startsWith('sk-'))
+                  ? headerKey
+                  : (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '');
+
                 const bodyBuffer = Buffer.concat(chunks);
                 const contentType = req.headers['content-type'] || 'multipart/form-data';
 

@@ -136,14 +136,14 @@ export default function DashboardView({ calls, onRunBatchAudit, isAuditingBatch,
       <div className="space-y-8 max-w-7xl mx-auto pb-16 animate-in fade-in duration-200">
         <div className="campaign-hub-hero">
           <div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(129, 140, 248, 0.3)', color: '#a5b4fc', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
-              <LayoutDashboard className="w-3.5 h-3.5 text-indigo-400" />
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)', color: '#4f46e5', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}>
+              <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600" />
               <span>Executive QA Portal</span>
             </div>
-            <h1 style={{ fontSize: '28px', fontWeight: '900', color: '#ffffff', lineHeight: '1.2', margin: '0 0 8px 0' }}>
+            <h1 style={{ fontSize: '28px', fontWeight: '900', color: '#0f172a', lineHeight: '1.2', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
               QA Compliance Dashboard
             </h1>
-            <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>
+            <p style={{ fontSize: '13px', color: '#64748b', margin: 0, fontWeight: '500' }}>
               Real-time conversation audits, adherence rate tracking, and compliance analytics.
             </p>
           </div>
@@ -170,14 +170,14 @@ export default function DashboardView({ calls, onRunBatchAudit, isAuditingBatch,
       {/* Premium Hero Header Banner */}
       <div className="campaign-hub-hero">
         <div style={{ zIndex: 2, maxWidth: '620px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(129, 140, 248, 0.3)', color: '#a5b4fc', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
-            <LayoutDashboard className="w-3.5 h-3.5 text-indigo-400" />
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)', color: '#4f46e5', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}>
+            <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600" />
             <span>Executive QA Intelligence</span>
           </div>
-          <h1 style={{ fontSize: '28px', fontWeight: '900', color: '#ffffff', lineHeight: '1.2', margin: '0 0 8px 0' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: '900', color: '#0f172a', lineHeight: '1.2', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
             QA Compliance Dashboard
           </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.6', margin: 0 }}>
+          <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.6', margin: 0, fontWeight: '500' }}>
             Real-time conversation AI audits, script adherence scoring, and agent compliance risk metrics.
           </p>
         </div>

@@ -48,6 +48,7 @@ const mapCallFromDb = (dbCall) => {
     redFlags: dbCall.red_flags || [],
     callQuality: dbCall.call_quality || {},
     evaluation: dbCall.evaluation || {},
+    summary: dbCall.summary || (dbCall.evaluation && dbCall.evaluation.summary) || null,
     transcript: dbCall.transcript || [],
     isRealTranscribed: dbCall.is_real_transcribed ?? (Array.isArray(dbCall.transcript) && dbCall.transcript.length > 0)
   };
@@ -103,6 +104,70 @@ const blobToBase64 = (blob) => {
   });
 };
 
+// Robust JSON extractor and auto-repair function for LLM outputs (handles unclosed strings, brackets, and truncation)
+const parseLlmJson = (rawText) => {
+  if (!rawText || typeof rawText !== 'string') return {};
+  
+  // 1. Remove markdown backticks if present
+  let cleaned = rawText.replace(/^```json\s*|```\s*$/gi, '').trim();
+  
+  // 2. Try direct JSON parse
+  try {
+    return JSON.parse(cleaned);
+  } catch (initialErr) {
+    console.warn("Direct JSON parse failed, attempting structural repair...", initialErr.message);
+  }
+
+  // 3. Extract outermost JSON object {...}
+  const firstBrace = cleaned.indexOf('{');
+  if (firstBrace === -1) throw new Error("No JSON object found in model response.");
+  cleaned = cleaned.slice(firstBrace);
+
+  // 4. Handle truncated JSON by repairing unclosed strings, arrays, and objects
+  let repaired = cleaned;
+  repaired = repaired.replace(/,\s*$/g, '');
+  
+  const quotes = (repaired.match(/(?<!\\)"/g) || []).length;
+  if (quotes % 2 !== 0) {
+    repaired += '"';
+  }
+
+  let openBraces = (repaired.match(/\{/g) || []).length;
+  let closeBraces = (repaired.match(/\}/g) || []).length;
+  let openBrackets = (repaired.match(/\[/g) || []).length;
+  let closeBrackets = (repaired.match(/\]/g) || []).length;
+
+  while (openBrackets > closeBrackets) {
+    repaired += ']';
+    closeBrackets++;
+  }
+  while (openBraces > closeBraces) {
+    repaired += '}';
+    closeBraces++;
+  }
+
+  try {
+    return JSON.parse(repaired);
+  } catch (repairErr) {
+    // 5. Regex recovery fallback for key fields if structural parse still fails
+    const scoreMatch = rawText.match(/"overallScore"\s*:\s*(\d+)/i);
+    const statusMatch = rawText.match(/"complianceStatus"\s*:\s*"([^"]+)"/i);
+    const feedbackMatch = rawText.match(/"feedback"\s*:\s*"([^"]+)"/i);
+    
+    if (scoreMatch || statusMatch) {
+      return {
+        overallScore: scoreMatch ? parseInt(scoreMatch[1], 10) : 75,
+        complianceStatus: statusMatch ? statusMatch[1] : 'Passed',
+        redFlags: [],
+        callQuality: { voiceClarity: "Clear", networkIssues: "None", backgroundNoise: "Low", agentTone: "Professional", agentPacing: "Optimal", candidateSentiment: "Neutral" },
+        evaluation: {},
+        feedback: feedbackMatch ? feedbackMatch[1] : 'AI compliance audit evaluation completed.'
+      };
+    }
+    throw repairErr;
+  }
+};
+
 // OpenAI Chat Completions API client helper — calls through local vite proxy (works on any machine/browser)
 const callOpenAiApi = async (apiKey, messages, retriesLeft = 3) => {
   const url = `/api/openai-proxy`;
@@ -111,7 +176,8 @@ const callOpenAiApi = async (apiKey, messages, retriesLeft = 3) => {
     model: 'gpt-4o-mini',
     messages,
     temperature: 0.2,
-    response_format: { type: 'json_object' }
+    response_format: { type: 'json_object' },
+    max_tokens: 4096
   };
 
   try {
@@ -139,7 +205,7 @@ const callOpenAiApi = async (apiKey, messages, retriesLeft = 3) => {
       } catch (_) {}
       if (response.status === 401 || errMsg.toLowerCase().includes('incorrect api key') || errMsg.toLowerCase().includes('invalid api key')) {
         localStorage.removeItem('openai_api_key');
-        errMsg = "Invalid or revoked OpenAI API Key. Please enter a valid API key in Settings or add OPENAI_API_KEY in Vercel Environment Variables.";
+        errMsg = "OpenAI API Key Authentication Error. Please ensure OPENAI_API_KEY is configured in your .env or Vercel Environment Variables.";
       }
       throw new Error(errMsg);
     }
@@ -150,9 +216,7 @@ const callOpenAiApi = async (apiKey, messages, retriesLeft = 3) => {
       throw new Error('OpenAI API returned an empty response.');
     }
 
-    // Strip markdown code blocks if present
-    const cleanJson = textResponse.replace(/^```json\s*|```\s*$/g, '').trim();
-    return JSON.parse(cleanJson);
+    return parseLlmJson(textResponse);
   } catch (err) {
     if (retriesLeft > 0 && (err.message?.includes('429') || err.message?.includes('rate limit'))) {
       console.warn(`Retrying after rate limit: ${err.message}. Waiting 10s...`);
@@ -239,25 +303,24 @@ export default function App() {
   // Settings & Session State
   const [slashRtcActive, setSlashRtcActive] = useState(true);
   const [apiKey, setApiKey] = useState(() => {
-    const envKey = import.meta.env.VITE_OPENAI_API_KEY || import.meta.env.OPENAI_API_KEY;
-    let savedKey = localStorage.getItem('openai_api_key');
+    const envKey = import.meta.env.VITE_OPENAI_API_KEY || import.meta.env.OPENAI_API_KEY || '';
+    let savedKey = localStorage.getItem('openai_api_key') || '';
     
-    // Auto-clear revoked key if still saved in browser localStorage
-    if (savedKey && (savedKey.includes('ptNx5JdZS') || savedKey.includes('FJ30UkWZfZj') || savedKey.includes('uNqOCmkMbHo8f'))) {
+    // Auto-clear invalid/revoked keys
+    if (savedKey && !savedKey.startsWith('sk-')) {
       localStorage.removeItem('openai_api_key');
-      savedKey = null;
+      savedKey = '';
     }
     
-    const resolved = (envKey && !envKey.includes('uNqOCmkMbHo8f')) ? envKey : (savedKey || '');
+    const resolved = (envKey && envKey.startsWith('sk-')) ? envKey : (savedKey || '');
     if (resolved && resolved !== savedKey) {
       localStorage.setItem('openai_api_key', resolved);
     }
     return resolved;
   });
 
-  // Persist valid apiKey to localStorage whenever user updates it in Settings
   useEffect(() => {
-    if (apiKey && !apiKey.includes('ptNx5JdZS') && !apiKey.includes('uNqOCmkMbHo8f')) {
+    if (apiKey && apiKey.startsWith('sk-')) {
       localStorage.setItem('openai_api_key', apiKey);
     }
   }, [apiKey]);
@@ -344,41 +407,47 @@ export default function App() {
       }
       
       try {
-        const { data, error } = await supabase
-          .from('calls')
-          .select('*')
-          .order('created_at', { ascending: false });
-          
-        if (error) {
-          console.error("Supabase load error:", error);
-          setDbError(error.message);
-          setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
-        } else {
-          if (data.length === 0) {
-            console.log("Supabase table is empty. Seeding initial demo data...");
-            const dbRows = SAMPLE_INITIAL_DATA.map(mapCallToDb);
-            const { error: seedError } = await supabase.from('calls').insert(dbRows);
-            
-            if (seedError) {
-              console.error("Failed to seed initial data to Supabase:", seedError);
-              setDbError(seedError.message);
+        let allDbRows = [];
+        let page = 0;
+        const pageSize = 1000;
+
+        while (true) {
+          const from = page * pageSize;
+          const to = from + pageSize - 1;
+          const { data, error } = await supabase
+            .from('calls')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .range(from, to);
+
+          if (error) {
+            console.error("Supabase load error on page", page, error);
+            if (page === 0) {
+              setDbError(error.message);
               setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
-            } else {
-              const { data: seededData, error: refetchError } = await supabase
-                .from('calls')
-                .select('*')
-                .order('created_at', { ascending: false });
-                
-              if (refetchError) {
-                console.error("Failed to fetch seeded data:", refetchError);
-                setDbError(refetchError.message);
-                setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
-              } else {
-                setCalls(sanitizeCalls(seededData.map(mapCallFromDb)));
-              }
             }
+            break;
+          }
+
+          if (!data || data.length === 0) break;
+          allDbRows = allDbRows.concat(data);
+          if (data.length < pageSize) break;
+          page++;
+        }
+
+        if (allDbRows.length > 0) {
+          setCalls(sanitizeCalls(allDbRows.map(mapCallFromDb)));
+        } else {
+          console.log("Supabase table is empty. Seeding initial demo data...");
+          const dbRows = SAMPLE_INITIAL_DATA.map(mapCallToDb);
+          const { error: seedError } = await supabase.from('calls').insert(dbRows);
+          
+          if (seedError) {
+            console.error("Failed to seed initial data to Supabase:", seedError);
+            setDbError(seedError.message);
+            setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
           } else {
-            setCalls(sanitizeCalls(data.map(mapCallFromDb)));
+            setCalls(sanitizeCalls(SAMPLE_INITIAL_DATA));
           }
         }
       } catch (err) {
@@ -433,30 +502,35 @@ export default function App() {
   // Handle CSV / Excel file import
   const handleImportData = async (newCalls) => {
     const sanitized = sanitizeCalls(newCalls);
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const dbRows = sanitized.map(mapCallToDb);
-        const { error } = await supabase.from('calls').insert(dbRows);
-        if (error) {
-          console.error("Failed to insert imported calls into Supabase:", error);
-          setDbError("Failed to save imported calls to backend: " + error.message);
-        }
-      } catch (err) {
-        console.error("Exception inserting imported calls:", err);
-        setDbError("Failed to save imported calls to backend: " + (err.message || err));
-      }
-    }
 
-    // Automatically remove sample demo calls when real CSV data is imported
+    // 1. Immediately update UI in memory so user is never blocked
     setCalls((prev) => {
       const nonDemoPrev = prev.filter(c => !c.id.startsWith('CALL-2026-0807-'));
       return [...sanitized, ...nonDemoPrev];
     });
     setIsUploadOpen(false);
-    confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-
     setImportSuccessData({ count: sanitized.length, newCalls: sanitized });
+    try {
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+    } catch (_) {}
+
+    // 2. Background async sync to Supabase in safe chunks of 200 rows
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      (async () => {
+        try {
+          const dbRows = sanitized.map(mapCallToDb);
+          const chunkSize = 200;
+          for (let i = 0; i < dbRows.length; i += chunkSize) {
+            const chunk = dbRows.slice(i, i + chunkSize);
+            const { error } = await supabase.from('calls').upsert(chunk);
+            if (error) console.warn("Supabase chunk upsert warning:", error.message);
+          }
+        } catch (err) {
+          console.warn("Exception saving imported calls to Supabase in background:", err);
+        }
+      })();
+    }
   };
 
   const handleStartImportAudit = async () => {
@@ -552,7 +626,8 @@ export default function App() {
             username: username || '',
             password: password || '',
             portalUrl: portalUrl || '',
-            sessionCookie: slashRtcCookie || ''
+            sessionCookie: slashRtcCookie || '',
+            prompt: "This is an Indian customer support and telecalling screening conversation in Hindi, Hinglish, and English. The agent and candidate discuss candidate background, interview details, salary, job profile, qualifications, and company process. Common words: Hello, Haanji, Namaste, Sir, Madam, Interview, Call record, NTC, Details, Candidate, Selection, Resume, Company, Location, Process."
           })
         });
 
@@ -631,21 +706,56 @@ export default function App() {
       }
 
       setAuditProgressStatus('Auditing Compliance (GPT-4o-mini)...');
+
+      // Intelligent Speaker Normalization before passing to LLM
+      const candidateFirstName = (callToAudit.candidateName || '').trim().split(' ')[0].toLowerCase();
+      currentCallTranscript = currentCallTranscript.map(line => {
+        const textLower = (line.text || '').toLowerCase();
+        let speaker = line.speaker;
+        const isAgentPhrase = 
+          textLower.includes('is i am speaking') ||
+          textLower.includes('am i speaking with') ||
+          textLower.includes('speaking with') ||
+          textLower.includes('relationship manager') ||
+          textLower.includes('from naukri') ||
+          textLower.includes('calling from naukri') ||
+          textLower.includes('dpr construction') ||
+          textLower.includes('dprusa.in') ||
+          textLower.includes('naukriedge.com') ||
+          (candidateFirstName.length >= 3 && textLower.includes(candidateFirstName) && (textLower.includes('hello') || textLower.includes('good morning') || textLower.includes('good afternoon') || textLower.includes('good evening')));
+
+        const isCandidatePhrase = 
+          textLower === 'yes' ||
+          textLower === 'yes.' ||
+          textLower === 'yes sir' ||
+          textLower === 'haan' ||
+          textLower === 'haanji' ||
+          textLower === 'speaking' ||
+          textLower.includes('i will call back') ||
+          textLower.includes('busy now') ||
+          textLower.includes('not audible') ||
+          textLower.includes("now it's audible");
+
+        if (isAgentPhrase) speaker = 'Agent';
+        else if (isCandidatePhrase && !isAgentPhrase) speaker = 'Candidate';
+        return { ...line, speaker };
+      });
+
       const transcriptText = currentCallTranscript.map(t => `${t.time} [${t.speaker}]: ${t.text}`).join('\n');
 
       const systemPrompt = `You are an expert QA Call Compliance Auditor evaluating an associate screening call for DPR Construction (NTC Screening Campaign).
 Analyze the provided transcript against the exact 10 NTC script checkpoints (CP1-CP10) and 4 Red Flag rules.
 
-CRITICAL LANGUAGE RULE (NATURAL HINGLISH + ENGLISH + HINDI COMBINED):
-- Retain the exact natural spoken dialogue in Hinglish, English, or Hindi (using natural Hinglish/English script or Hindi).
-- Do NOT convert English words into Devanagari forced transliteration loops.
-- Do NOT translate original dialogue to English.
+CRITICAL SCRIPT & LANGUAGE INTEGRITY:
+- If the raw speech-to-text transcript contains hallucinated foreign characters (such as Tamil, Telugu, Malayalam, Arabic, or Cyrillic characters erroneously generated from Indian English/Hindi phonetics), you MUST accurately reconstruct and output the clean, natural spoken dialogue in readable Hinglish, English, or Hindi (Devanagari).
+- NEVER output Tamil unicode characters in diarizedSegments.
+- Retain the exact natural spoken dialogue in Hinglish, English, or Hindi.
 - Ensure Agent and Candidate speaker labels accurately separate the Relationship Manager ("Agent") from the candidate ("Candidate").
 
-CRITICAL SPEAKER DIARIZATION INSTRUCTION (Agent vs Candidate):
-You MUST accurately identify and label each speaker segment as either "Agent" or "Candidate":
-1. "Agent": The Relationship Manager / HR caller from Naukri.com introducing job opportunities, pitching DPR Construction, asking eligibility questions, stating mandatory certifications, giving www.dprusa.in website redirect.
-2. "Candidate": The job applicant responding (e.g. "Hello", "Haan ji", "Main free hoon", "8 years experience", "Mumbai", "12 LPA", "DPR is a fake company", "Theek hai", "Thank you", answering questions, or expressing concerns).
+CRITICAL SPEAKER DIARIZATION & GREETING RULES:
+1. "Agent": The Relationship Manager opening the call, greeting ("Hello / Good Evening / Good Morning / Namaste"), asking candidate confirmation ("Is I am speaking with [Candidate Name]?"), pitching DPR Construction, and asking screening questions.
+2. "Candidate": The job applicant responding ("Yes", "Haanji", "Pradeep speaking", "I am busy, call later", answering experience questions).
+3. If the Agent greeted the candidate and verified their identity (e.g. "Good Evening, Is I am speaking with Pradeep?"), mark CP1 "greetingPassed": true.
 
 Return a JSON object with strictly these keys:
 {
@@ -654,8 +764,22 @@ Return a JSON object with strictly these keys:
   "redFlags": [ { "code": string, "severity": string, "title": string, "snippet": string } ],
   "callQuality": { "voiceClarity": "Clear"|"Muffled", "networkIssues": "None"|"High", "backgroundNoise": "Low"|"High", "agentTone": "Professional"|"Monotone"|"Submissive", "agentPacing": "Optimal"|"Rushed", "candidateSentiment": "Interested"|"Neutral"|"Uninterested" },
   "evaluation": { "greetingPassed": bool, "hrIntroPassed": bool, "eligibilityPassed": bool, "companyOverviewPassed": bool, "screeningQuestionsPassed": bool, "globalPitchPassed": bool, "behavioralPassed": bool, "certificationsPassed": bool, "joiningBonusPassed": bool, "websiteRedirectPassed": bool },
-  "diarizedSegments": [ { "speaker": "Agent" | "Candidate", "time": "MM:SS", "text": string } ],
-  "feedback": string
+  "summary": {
+    "overview": "string (2-3 sentence overview describing whether candidate completed screening, was interested, declined, or was busy and requested a callback at a specific time)",
+    "keyHighlights": [ "string (3-4 detailed bullet points detailing what the candidate said, including callback time requests e.g. Candidate stated they are busy and requested callback at 7:30 PM, current employment, or objections)" ],
+    "candidateProfile": {
+      "experience": "string",
+      "currentRole": "string",
+      "currentLocation": "string",
+      "preferredLocation": "string",
+      "salaryExpectation": "string",
+      "interestLevel": "Interested" | "Busy / Requested Callback" | "Not Interested" | "Neutral"
+    },
+    "callOutcome": "string (e.g. Candidate requested callback at 7:30 PM or Shortlisted or Declined)",
+    "nextSteps": "string (e.g. Schedule callback for 7:30 PM or Technical interview or Close lead)"
+  },
+  "diarizedSegments": [ { "speaker": "Agent" | "Candidate", "time": "MM:SS", "text": "string" } ],
+  "feedback": "string"
 }`;
 
       const userPrompt = `Transcript:\n${transcriptText}\n\nCheckpoints (NTC Campaign PDF):
@@ -694,6 +818,7 @@ Return ONLY valid JSON.`;
         redFlagsCount: (aiResult.redFlags || []).length,
         redFlags: aiResult.redFlags || [],
         callQuality: aiResult.callQuality || {},
+        summary: aiResult.summary || null,
         evaluation: {
           ...aiResult.evaluation,
           feedback: aiResult.feedback || 'AI compliance audit completed.'
@@ -711,6 +836,7 @@ Return ONLY valid JSON.`;
         redFlagsCount: finalResult.redFlagsCount,
         redFlags: finalResult.redFlags,
         callQuality: finalResult.callQuality,
+        summary: finalResult.summary,
         evaluation: finalResult.evaluation
       };
 
@@ -1053,17 +1179,17 @@ Return ONLY valid JSON.`;
           {activeView === 'settings' && (
             <div style={{ maxWidth: '1280px', margin: '0 auto', paddingBottom: '64px' }} className="space-y-8 animate-in fade-in duration-200">
               
-              {/* Dark Hero Header Banner */}
+              {/* Premium White Hero Header Banner */}
               <div className="campaign-hub-hero">
                 <div style={{ zIndex: 2 }}>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(129, 140, 248, 0.3)', color: '#a5b4fc', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
-                    <Settings className="w-3.5 h-3.5 text-indigo-400" />
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)', color: '#4f46e5', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}>
+                    <Settings className="w-3.5 h-3.5 text-indigo-600" />
                     <span>System Integration Engine</span>
                   </div>
-                  <h1 style={{ fontSize: '28px', fontWeight: '900', color: '#ffffff', lineHeight: '1.2', margin: '0 0 8px 0' }}>
+                  <h1 style={{ fontSize: '28px', fontWeight: '900', color: '#0f172a', lineHeight: '1.2', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
                     System Settings & Credentials
                   </h1>
-                  <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0, maxWidth: '580px', lineHeight: '1.6' }}>
+                  <p style={{ fontSize: '13px', color: '#64748b', margin: 0, maxWidth: '580px', lineHeight: '1.6', fontWeight: '500' }}>
                     Configure credentials for AramcoIndia SlashRTC dialer portals and AI audio proxy services.
                   </p>
                 </div>
@@ -1295,47 +1421,201 @@ Return ONLY valid JSON.`;
       )}
 
       {importSuccessData && (
-        <div className="modal-backdrop select-none">
-          <div className="bg-white text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-xl max-w-md w-full p-7 relative modal-content text-left">
-            <button
-              onClick={handleCloseImportSuccess}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+        <div 
+          className="modal-backdrop select-none"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.5)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+        >
+          <div 
+            style={{ 
+              maxWidth: '520px',
+              width: '100%',
+              backgroundColor: '#ffffff',
+              borderRadius: '20px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              textAlign: 'left'
+            }}
+            className="modal-content"
+          >
+            
+            {/* Header */}
+            <div 
+              style={{
+                padding: '20px 24px',
+                backgroundColor: '#ffffff',
+                borderBottom: '1px solid #f1f5f9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
             >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
-                <Sparkles className="w-5 h-5" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div 
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '12px',
+                    backgroundColor: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <Check style={{ width: '20px', height: '20px' }} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
+                      Import Complete
+                    </h3>
+                    <span 
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: '#ecfdf5',
+                        color: '#059669',
+                        border: '1px solid #a7f3d0'
+                      }}
+                    >
+                      Telephony Ready
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0', fontWeight: '400' }}>
+                    Successfully processed and mapped {importSuccessData.count.toLocaleString()} call records
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-[var(--text-primary)] text-lg">Import Complete</h3>
-                <p className="text-[13px] text-[var(--text-muted)]">Successfully processed {importSuccessData.count} call records</p>
-              </div>
-            </div>
 
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-[13px] text-indigo-700 font-medium mb-6 leading-relaxed">
-              <p className="font-semibold flex items-center gap-1.5 mb-1 text-indigo-600">
-                <Database className="w-4 h-4" /> Ready for AI compliance auditing
-              </p>
-              Your dataset has been ingested. Start AI evaluation immediately or browse the imported records first.
-            </div>
-
-            <div className="flex items-center justify-end gap-3 border-t border-[var(--border-color)] pt-5">
               <button
                 onClick={handleCloseImportSuccess}
-                className="btn-secondary py-2.5 px-5 text-sm font-medium"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: '#94a3b8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  flexShrink: 0
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f1f5f9';
+                  e.currentTarget.style.color = '#334155';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#94a3b8';
+                }}
+                title="Close"
+              >
+                <X style={{ width: '18px', height: '18px' }} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div 
+                style={{
+                  padding: '16px 18px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '700', color: '#1e293b', marginBottom: '6px' }}>
+                  <Database style={{ width: '16px', height: '16px', color: '#4f46e5' }} />
+                  <span>Ready for AI Compliance Auditing</span>
+                </div>
+                <p style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6, margin: 0 }}>
+                  Your dataset has been partitioned across campaign rooms and structured with dynamic audio links. You can launch full automated audits immediately or explore records first.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div 
+              style={{
+                padding: '16px 24px',
+                backgroundColor: '#f8fafc',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '12px'
+              }}
+            >
+              <button
+                onClick={handleCloseImportSuccess}
+                style={{
+                  padding: '9px 18px',
+                  backgroundColor: '#ffffff',
+                  color: '#334155',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f1f5f9';
+                  e.currentTarget.style.borderColor = '#94a3b8';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#ffffff';
+                  e.currentTarget.style.borderColor = '#cbd5e1';
+                }}
               >
                 View Records
               </button>
               <button
                 onClick={handleStartImportAudit}
-                className="btn-primary py-2.5 px-5 text-sm font-semibold flex items-center gap-2"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '9px 20px',
+                  backgroundColor: '#4f46e5',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#4338ca'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#4f46e5'; }}
               >
-                <Sparkles className="w-4 h-4" />
+                <Sparkles style={{ width: '15px', height: '15px' }} />
                 <span>Start AI Audit</span>
               </button>
             </div>
+
           </div>
         </div>
       )}

@@ -114,7 +114,10 @@ export default async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || req.headers['x-api-key'] || '';
+  const clientKey = (req.headers['x-api-key'] || '').trim();
+  const apiKey = (clientKey && clientKey.startsWith('sk-'))
+    ? clientKey
+    : (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '');
 
   if (!apiKey) {
     res.status(500).json({ status: 'TRANSCRIPTION_FAILED', error: 'Server-side OPENAI_API_KEY is not configured.' });
@@ -258,11 +261,19 @@ export default async function handler(req, res) {
     const textPart = (name, value) =>
       `--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}${value}${CRLF}`;
 
+    const defaultPrompt = "This is an Indian telecalling screening conversation in Hindi, Hinglish, and English. The agent and candidate discuss job opportunities, candidate qualifications, interview process, salary, and company details. Common words: Hello, Haanji, Namaste, Sir, Madam, Interview, Call record, NTC, Details, Selection, Resume, Company, Location.";
+    const whisperPrompt = bodyData.prompt || defaultPrompt;
+
     const textFields = [
       textPart('model', 'whisper-1'),
       textPart('response_format', 'verbose_json'),
       textPart('timestamp_granularities[]', 'segment'),
+      textPart('prompt', whisperPrompt),
     ];
+
+    if (bodyData.language && bodyData.language !== 'auto') {
+      textFields.push(textPart('language', bodyData.language));
+    }
 
     const textBuffer = Buffer.from(textFields.join(''), 'utf-8');
     const fileHeader = Buffer.from(
@@ -272,7 +283,7 @@ export default async function handler(req, res) {
     const fileFooter   = Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf-8');
     const payloadBuffer = Buffer.concat([textBuffer, fileHeader, buffer, fileFooter]);
 
-    console.log(`[transcribe-call] Whisper payload: ${payloadBuffer.length} bytes`);
+    console.log(`[transcribe-call] Whisper payload: ${payloadBuffer.length} bytes with prompt biasing`);
 
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',

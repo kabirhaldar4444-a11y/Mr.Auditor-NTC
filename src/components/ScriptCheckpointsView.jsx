@@ -32,25 +32,25 @@ export default function ScriptCheckpointsView() {
   return (
     <div style={{ maxWidth: '1280px', margin: '0 auto', paddingBottom: '64px' }} className="space-y-8 animate-in fade-in duration-200 text-left">
       
-      {/* Dark Hero Header Banner */}
+      {/* Premium White Hero Header Banner */}
       <div className="campaign-hub-hero">
         <div style={{ zIndex: 2 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(129, 140, 248, 0.3)', color: '#a5b4fc', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)', color: '#4f46e5', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}>
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
             <span>NTC Campaign Standard Operating Procedure</span>
           </div>
-          <h1 style={{ fontSize: '28px', fontWeight: '900', color: '#ffffff', lineHeight: '1.2', margin: '0 0 8px 0' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: '900', color: '#0f172a', lineHeight: '1.2', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
             NTC Campaign Screening Script & QA Standard
           </h1>
-          <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0, maxWidth: '650px', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '13px', color: '#64748b', margin: 0, maxWidth: '650px', lineHeight: '1.6', fontWeight: '500' }}>
             Official Naukri Candidate Screening Script for DPR Construction. Contains exact dialogue lines, 13 verification questions, domain certification rules, ₹5 Lakhs joining bonus, and FAQs.
           </p>
         </div>
 
         <div style={{ zIndex: 2, display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ background: 'rgba(30, 41, 59, 0.8)', padding: '12px 20px', borderRadius: '16px', border: '1px solid rgba(51, 65, 85, 0.8)', textAlign: 'right' }}>
-            <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', display: 'block' }}>NTC Target Score</span>
-            <span style={{ fontSize: '22px', fontWeight: '900', color: '#10b981', display: 'block', marginTop: '2px' }}>100 Pts</span>
+          <div style={{ background: '#f8fafc', padding: '12px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', textAlign: 'right' }}>
+            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', display: 'block' }}>NTC Target Score</span>
+            <span style={{ fontSize: '22px', fontWeight: '900', color: '#059669', display: 'block', marginTop: '2px' }}>100 Pts</span>
           </div>
         </div>
       </div>

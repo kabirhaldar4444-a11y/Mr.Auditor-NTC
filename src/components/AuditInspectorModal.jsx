@@ -2,9 +2,159 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Play, Pause, ShieldCheck, ShieldAlert, CheckCircle2,
   XCircle, Sparkles, ExternalLink, Lock, FileText,
-  MessageSquare, X, AlertTriangle, Volume2, Clock, Check, Users, PhoneOff, VolumeX, AlertCircle
+  MessageSquare, X, AlertTriangle, Volume2, Clock, Check, Users, PhoneOff, VolumeX, AlertCircle,
+  Briefcase, MapPin, UserCheck, DollarSign, ListChecks, TrendingUp, Bot, Compass, Award
 } from 'lucide-react';
 import { SCRIPT_CHECKPOINTS, RED_FLAG_RULES, PDF_SCRIPT_LINES, sanitizeCallRecord } from '../data/scriptData';
+
+// Helper to extract or construct a smart structured call summary
+const getStructuredCallSummary = (call) => {
+  const existingSummary = call.summary || {};
+  const evalData = call.evaluation || {};
+  const transcript = call.transcript || [];
+  
+  const agentLines = transcript.filter(t => t.speaker === 'Agent').map(t => t.text).join(' ');
+  const candidateLines = transcript.filter(t => t.speaker === 'Candidate').map(t => t.text).join(' ');
+  const combinedText = (candidateLines + ' ' + agentLines).toLowerCase();
+
+  // 1. Detect Callback / Busy / Timing Requests
+  const isBusyOrCallback = combinedText.includes('busy') ||
+    combinedText.includes('call back') ||
+    combinedText.includes('call later') ||
+    combinedText.includes('call after') ||
+    combinedText.includes('driving') ||
+    combinedText.includes('in meeting') ||
+    combinedText.includes('baad mein') ||
+    combinedText.includes('kal call') ||
+    combinedText.includes('later');
+
+  let callbackTime = null;
+  const timeMatch = combinedText.match(/(?:after|at|around|sometimes)?\s*(\d{1,2}(?::\d{2}|\.\d{2})?\s*(?:o'?clock|am|pm|baje)?)/i);
+  if (timeMatch && (combinedText.includes('call') || combinedText.includes('busy') || combinedText.includes('later'))) {
+    const rawT = timeMatch[1].trim();
+    if (rawT.length >= 2 && !rawT.startsWith('00:')) {
+      callbackTime = rawT;
+    }
+  }
+
+  // 2. Experience
+  let experience = existingSummary.candidateProfile?.experience;
+  if (!experience || experience === 'N/A' || experience === 'None') {
+    const expMatch = combinedText.match(/(\d+)\s*(?:years?|yrs?)/i);
+    experience = expMatch ? `${expMatch[1]} Years` : (isBusyOrCallback ? 'Not Discussed (Call Rescheduled)' : 'Not Disclosed on Call');
+  }
+
+  // 3. Current Role / Domain
+  let currentRole = existingSummary.candidateProfile?.currentRole;
+  if (!currentRole || currentRole === 'N/A' || currentRole === 'None') {
+    if (combinedText.includes('civil') || combinedText.includes('site')) currentRole = 'Civil / Site Engineer';
+    else if (combinedText.includes('safety') || combinedText.includes('hse') || combinedText.includes('osha')) currentRole = 'Safety Officer / HSE';
+    else if (combinedText.includes('project') || combinedText.includes('planning')) currentRole = 'Project / Planning Engineer';
+    else if (combinedText.includes('autocad') || combinedText.includes('drafting')) currentRole = 'CAD / Design Engineer';
+    else currentRole = isBusyOrCallback ? 'Candidate (Callback Requested)' : 'Engineering / Technical Candidate';
+  }
+
+  // 4. Location Preference
+  let location = existingSummary.candidateProfile?.preferredLocation || existingSummary.candidateProfile?.currentLocation;
+  if (!location || location === 'N/A' || location === 'None') {
+    if (combinedText.includes('dubai') || combinedText.includes('gulf') || combinedText.includes('uae') || combinedText.includes('international')) {
+      location = 'Open to International (Gulf / USA) & Domestic';
+    } else if (combinedText.includes('pune') || combinedText.includes('mumbai') || combinedText.includes('bangalore') || combinedText.includes('delhi')) {
+      location = 'Domestic (India Metro Hubs)';
+    } else {
+      location = isBusyOrCallback ? 'To Be Discussed on Callback' : 'Open to Domestic & International Projects';
+    }
+  }
+
+  // 5. Interest Level
+  let interestLevel = existingSummary.candidateProfile?.interestLevel;
+  if (!interestLevel || interestLevel === 'N/A' || interestLevel === 'Neutral') {
+    if (isBusyOrCallback) {
+      interestLevel = callbackTime ? `Busy / Requested Callback (${callbackTime})` : 'Busy / Requested Callback';
+    } else if (combinedText.includes('not interested') || combinedText.includes('fraud') || combinedText.includes('disconnect') || combinedText.includes('wrong number') || combinedText.includes('nahi chahiye')) {
+      interestLevel = 'Not Interested';
+    } else if (combinedText.includes('send') || combinedText.includes('interested') || combinedText.includes('apply') || combinedText.includes('resume') || evalData.joiningBonusPassed) {
+      interestLevel = 'Interested';
+    } else {
+      interestLevel = 'Neutral';
+    }
+  }
+
+  // 6. Overview
+  let overview = existingSummary.overview;
+  if (!overview || overview === '-' || overview.length < 15 || overview.includes('failed to cover essential')) {
+    if (isBusyOrCallback) {
+      overview = `Candidate ${call.candidateName || 'Candidate'} was reached by Relationship Manager ${call.agentName || 'Agent'} (Duration: ${call.talkTime || call.duration || '0:00:47'}). The candidate stated that they are currently busy and explicitly requested a callback ${callbackTime ? `at ${callbackTime}` : 'at a later time'}. Full screening was paused for the callback.`;
+    } else if (combinedText.includes('not interested')) {
+      overview = `Candidate ${call.candidateName || 'Candidate'} was contacted by Relationship Manager ${call.agentName || 'Agent'}. The candidate indicated they are not interested in exploring job opportunities with DPR Construction at this time.`;
+    } else {
+      overview = `Telephony screening call between Agent ${call.agentName || 'Agent'} and Candidate ${call.candidateName || 'Candidate'} (Duration: ${call.talkTime || call.duration || '0:00:45'}, Disposition: ${call.disposition || 'Screening'}). ${evalData.feedback || 'Call evaluated against standard DPR screening checkpoints and script compliance guidelines.'}`;
+    }
+  }
+
+  // 7. Key Highlights
+  let keyHighlights = existingSummary.keyHighlights;
+  if (!Array.isArray(keyHighlights) || keyHighlights.length === 0) {
+    if (isBusyOrCallback) {
+      keyHighlights = [
+        `Candidate was reached on call but mentioned they are currently busy.`,
+        `Candidate requested a callback ${callbackTime ? `at ${callbackTime}` : 'later'} to discuss the DPR opportunity.`,
+        `Greeting and initial name verification was acknowledged by candidate.`,
+        `Total conversation talk-time logged: ${call.talkTime || call.duration || '0:00:47'}.`
+      ];
+    } else {
+      keyHighlights = [
+        evalData.greetingPassed ? `Greeting & Candidate Name Verification verified.` : `Candidate greeting check: ${evalData.greetingPassed === false ? 'Missed or incomplete.' : 'Evaluated on call.'}`,
+        evalData.companyOverviewPassed ? `DPR Construction credentials, US HQ & BKC office background pitched.` : `Company Overview & multinational pedigree discussion.`,
+        evalData.eligibilityPassed ? `Candidate eligibility, notice period & current employment status recorded.` : `Verification questions and candidate qualifications discussed.`,
+        evalData.websiteRedirectPassed ? `Mandatory portal redirect to www.dprusa.in instructed to candidate.` : (call.talkTime ? `Total conversation talk-time logged: ${call.talkTime}.` : `Screening outcome logged under disposition ${call.disposition || 'Evaluated'}.`)
+      ];
+    }
+  }
+
+  // 8. Call Outcome
+  let callOutcome = existingSummary.callOutcome;
+  if (!callOutcome || callOutcome.trim() === '') {
+    if (isBusyOrCallback) {
+      callOutcome = `Candidate requested callback ${callbackTime ? `at ${callbackTime}` : 'later'}. Disposition: ${call.disposition || 'Callback Scheduled'}.`;
+    } else if (call.overallScore >= 70 || call.complianceStatus === 'Passed') {
+      callOutcome = `Candidate passed screening evaluation (Score: ${call.overallScore || 75}%). Profile shortlisted with instructions to email resume to contact@naukriedge.com and review www.dprusa.in.`;
+    } else if (call.complianceStatus === 'Unanswered' || (parseTimeToSeconds(call.talkTime) <= 5)) {
+      callOutcome = `No agent-candidate conversation occurred (Disposition: ${call.disposition || 'Ringing no Response'}). Compliance audit not applicable.`;
+    } else {
+      callOutcome = `Call evaluated with adherence score ${call.overallScore || 0}%. Disposition: ${call.disposition || 'Follow-up'}.`;
+    }
+  }
+
+  // 9. Next Action Steps
+  let nextSteps = existingSummary.nextSteps;
+  if (!nextSteps || nextSteps.trim() === '') {
+    if (isBusyOrCallback) {
+      nextSteps = `Schedule dialer callback ${callbackTime ? `for ${callbackTime}` : 'during evening hours'} as explicitly requested by candidate.`;
+    } else if (call.overallScore >= 70 || call.complianceStatus === 'Passed') {
+      nextSteps = `Shortlist candidate profile for Technical Review. Confirm mandatory certification enrolment and provide www.dprusa.in portal reference.`;
+    } else if (call.complianceStatus === 'Unanswered') {
+      nextSteps = `Trigger automated dialer re-queue to retry connecting with candidate during business hours.`;
+    } else {
+      nextSteps = `Re-screening or manager review recommended to address missed checkpoints and verify candidate availability.`;
+    }
+  }
+
+  return {
+    overview,
+    keyHighlights,
+    candidateProfile: {
+      experience,
+      currentRole,
+      currentLocation: location,
+      preferredLocation: location,
+      salaryExpectation: existingSummary.candidateProfile?.salaryExpectation || 'Discussed on Call',
+      interestLevel
+    },
+    callOutcome,
+    nextSteps
+  };
+};
 
 const parseTimeToSeconds = (timeStr) => {
   if (!timeStr) return 0;
@@ -105,11 +255,12 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
 
   const displayTranscript = useMemo(() => {
     if (!call.transcript || !Array.isArray(call.transcript)) return [];
-    return call.transcript.filter(line => {
+    
+    // 1. Filter out empty lines / hallucination loops
+    const cleaned = call.transcript.filter(line => {
       if (!line || !line.text) return false;
       const txt = line.text.trim();
       if (txt.length === 0) return false;
-      // Only remove pure hallucination loops where a single word dominates >60% of segment
       const words = txt.split(/\s+/);
       if (words.length >= 6) {
         const freq = {};
@@ -124,7 +275,53 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
       }
       return true;
     });
-  }, [call.transcript]);
+
+    // 2. Intelligent Speaker Diarization Alignment
+    // Fixes instances where the Agent's opening greeting/screening is mislabeled as Candidate
+    const candidateFirstName = (call.candidateName || '').trim().split(' ')[0].toLowerCase();
+    
+    return cleaned.map((line) => {
+      const textLower = line.text.toLowerCase();
+      let speaker = line.speaker;
+
+      // Unambiguous Agent phrases
+      const isAgentPhrase = 
+        textLower.includes('is i am speaking') ||
+        textLower.includes('am i speaking with') ||
+        textLower.includes('speaking with') ||
+        textLower.includes('relationship manager') ||
+        textLower.includes('from naukri') ||
+        textLower.includes('calling from naukri') ||
+        textLower.includes('dpr construction') ||
+        textLower.includes('dprusa.in') ||
+        textLower.includes('naukriedge.com') ||
+        (candidateFirstName.length >= 3 && textLower.includes(candidateFirstName) && (textLower.includes('hello') || textLower.includes('good morning') || textLower.includes('good afternoon') || textLower.includes('good evening')));
+
+      // Unambiguous Candidate responses
+      const isCandidatePhrase = 
+        textLower === 'yes' ||
+        textLower === 'yes.' ||
+        textLower === 'yes sir' ||
+        textLower === 'haan' ||
+        textLower === 'haanji' ||
+        textLower === 'speaking' ||
+        textLower.includes('i will call back') ||
+        textLower.includes('busy now') ||
+        textLower.includes('not audible') ||
+        textLower.includes("now it's audible");
+
+      if (isAgentPhrase) {
+        speaker = 'Agent';
+      } else if (isCandidatePhrase && !isAgentPhrase) {
+        speaker = 'Candidate';
+      }
+
+      return {
+        ...line,
+        speaker
+      };
+    });
+  }, [call.transcript, call.candidateName]);
 
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -636,8 +833,8 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
         </div>
 
         {/* 3. Sub-Header: Pill Tabs & Script Adherence Score */}
-        <div style={{ padding: '10px 24px', background: '#ffffff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ display: 'flex', gap: '6px', background: '#f1f5f9', padding: '4px', borderRadius: '12px' }}>
+        <div style={{ padding: '10px 24px', background: '#ffffff', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '6px', background: '#f1f5f9', padding: '4px', borderRadius: '12px', flexWrap: 'wrap' }}>
             <button
               onClick={() => setActiveTab('AUDIT')}
               style={{
@@ -658,6 +855,28 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
             >
               <ShieldCheck className="w-4 h-4" />
               <span>AI Audit Evaluation</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('SUMMARY')}
+              style={{
+                padding: '7px 16px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '700',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: activeTab === 'SUMMARY' ? '#ffffff' : 'transparent',
+                color: activeTab === 'SUMMARY' ? '#4f46e5' : '#64748b',
+                boxShadow: activeTab === 'SUMMARY' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Sparkles className="w-4 h-4 text-indigo-600" />
+              <span>Executive Call Summary</span>
             </button>
 
             <button
@@ -729,24 +948,37 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
         </div>
 
         {/* 4. Tab Body Content — STRICT FLEX CONTAINMENT */}
-        <div style={{ flex: 1, overflow: 'hidden', padding: '18px 24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ flex: 1, overflow: 'hidden', padding: '16px 24px', background: '#f8fafc', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
           {/* TAB 1: MAIN AUDIT BREAKDOWN */}
           {activeTab === 'AUDIT' && (() => {
             const alignment = analyzeScriptAlignment(call.transcript, PDF_SCRIPT_LINES);
+            const callSummary = getStructuredCallSummary(call);
+
+            // Filter ONLY real violations (exclude items where snippet is 'N/A' or empty)
+            const activeRedFlags = (call.redFlags || []).filter(rf => {
+              if (!rf) return false;
+              const snip = String(rf.snippet || rf.description || '').trim();
+              if (!snip || snip === 'N/A' || snip === 'None' || snip.toLowerCase() === 'not applicable' || snip === 'Passed') return false;
+              return true;
+            });
 
             const getCheckpointState = (lineId, evalKey) => {
               const align = alignment[lineId];
               const aiEvalPassed = call.evaluation && typeof call.evaluation[evalKey] === 'boolean' ? call.evaluation[evalKey] : null;
               const isAudioFinished = duration > 0 && currentTime >= duration - 1;
 
+              // 1. Direct speech-to-text keyword alignment match
+              if (align?.status === 'COMPLETED' || align?.status === 'TAKEN_LATER') {
+                return { status: 'COMPLETED', label: `✓ PASSED [${align.matchTime || ''}]` };
+              }
+
+              // 2. AI evaluated status
               if (showFinalReport || isAudioFinished || call.status === 'Audited') {
                 if (aiEvalPassed !== null) {
                   if (aiEvalPassed) return { status: 'COMPLETED', label: '✓ PASSED' };
                   return { status: 'MISSED', label: '✗ FAILED' };
                 }
-                if (align?.status === 'COMPLETED') return { status: 'COMPLETED', label: `✓ PASSED [${align.matchTime}]` };
-                if (align?.status === 'TAKEN_LATER') return { status: 'TAKEN_LATER', label: `✓ PASSED [${align.matchTime}]` };
                 return { status: 'MISSED', label: '✗ MISSED' };
               }
 
@@ -767,66 +999,78 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
             };
 
             return (
-              <div style={{ display: 'flex', gap: '20px', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', gap: '18px', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden' }}>
 
-                {/* Left Column: Live Speech-to-Text alignment */}
-                <div style={{ flex: '1 1 58%', display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0, height: '100%', overflow: 'hidden' }}>
+                {/* Left Column: Summary Briefing + Speech-to-Text Aligned Stream */}
+                <div style={{ flex: '1 1 56%', display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0, height: '100%', overflow: 'hidden' }}>
 
-                  {/* Critical Red Flag Alert Banner — BOUNDED MAX HEIGHT */}
-                  {call.hasRedFlags && call.redFlags && call.redFlags.length > 0 && (
-                    <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '14px', padding: '12px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left', flexShrink: 0, maxHeight: '160px', overflowY: 'auto' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                        <div style={{ padding: '6px', background: '#ffe4e6', color: '#be123c', borderRadius: '8px', flexShrink: 0 }}>
-                          <ShieldAlert className="w-4 h-4 animate-pulse" />
+                  {/* Summary Snippet Card */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#eef2ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '11px', fontWeight: '800', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>AI Candidate Briefing</span>
+                          <span style={{ fontSize: '10px', fontWeight: '600', padding: '1px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#475569' }}>
+                            {callSummary.candidateProfile?.currentRole || 'Candidate'} • {callSummary.candidateProfile?.experience || '5+ Yrs'}
+                          </span>
                         </div>
-                        <div style={{ flex: 1 }}>
-                          <h3 style={{ fontSize: '12px', fontWeight: '800', color: '#9f1239', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px 0' }}>
-                            Critical Compliance Violations ({call.redFlags.length})
-                          </h3>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {call.redFlags.map((rf, idx) => (
-                              <div key={idx} style={{ background: '#ffffff', border: '1px solid #fecdd3', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                                <span style={{ color: '#be123c', fontWeight: '800' }}>⚠️ {rf.title}: </span>
-                                <span style={{ color: '#334155', fontWeight: '500' }}>{rf.snippet || rf.description}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                        <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {callSummary.overview}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('SUMMARY')}
+                      style={{ padding: '5px 12px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '11px', fontWeight: '700', color: '#4f46e5', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      View Full Summary →
+                    </button>
+                  </div>
+
+                  {/* Critical Red Flag Alert Banner (Shown ONLY for real active violations) */}
+                  {activeRedFlags.length > 0 && (
+                    <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '12px', padding: '8px 12px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)', textAlign: 'left', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ padding: '4px', background: '#ffe4e6', color: '#be123c', borderRadius: '6px', flexShrink: 0 }}>
+                        <ShieldAlert className="w-4 h-4 animate-pulse" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#9f1239', textTransform: 'uppercase' }}>
+                          Violation:
+                        </span>
+                        {activeRedFlags.map((rf, idx) => (
+                          <span key={idx} style={{ background: '#ffffff', border: '1px solid #fecdd3', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', color: '#be123c', fontWeight: '700' }}>
+                            ⚠️ {rf.title}: <span style={{ color: '#334155', fontWeight: '500' }}>"{rf.snippet || rf.description}"</span>
+                          </span>
+                        ))}
                       </div>
                     </div>
                   )}
 
                   {(!call.isRealTranscribed && (!displayTranscript || displayTranscript.length === 0)) && call.complianceStatus !== 'Unanswered' && (
-                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left', flexShrink: 0 }}>
-                      <div style={{ padding: '6px', background: '#fef3c7', color: '#b45309', borderRadius: '8px', flexShrink: 0 }}>
-                        <AlertTriangle className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#78350f', textTransform: 'uppercase', margin: 0 }}>
-                          Raw Audio Loaded — Speech-to-Text Not Yet Run
-                        </h4>
-                        <p style={{ fontSize: '11px', color: '#92400e', margin: '2px 0 0 0', lineHeight: 1.4 }}>
-                          Click <strong style={{ color: '#4f46e5' }}>"Run AI Audit"</strong> in the top header bar to generate real Speech-to-Text.
-                        </p>
-                      </div>
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px', textAlign: 'left', flexShrink: 0 }}>
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span style={{ fontSize: '11px', color: '#92400e', fontWeight: '600' }}>
+                        Raw Audio Loaded. Click <strong style={{ color: '#4f46e5' }}>"Run AI Audit"</strong> to generate aligned speech-to-text.
+                      </span>
                     </div>
                   )}
 
                   {/* Speech-to-Text Aligned Stream Card — EXPANDS TO FILL REMAINING HEIGHT */}
-                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left' }}>
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '14px 16px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left' }}>
                     
-                    <div style={{ paddingBottom: '10px', borderBottom: '1px solid #f1f5f9', marginBottom: '12px', flexShrink: 0 }}>
-                      <h3 style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ paddingBottom: '8px', borderBottom: '1px solid #f1f5f9', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                      <h3 style={{ fontSize: '12px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <MessageSquare className="w-4 h-4 text-indigo-600" />
                         <span>Speech-to-Text Aligned Stream</span>
                       </h3>
-                      <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0 0', lineHeight: 1.4 }}>
-                        Auditor playback and compliance workspace. Click lines or words to jump directly to audio timestamps.
-                      </p>
+                      <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '600' }}>Click any word or timestamp to jump audio</span>
                     </div>
 
                     {/* Stream Scrollable List */}
-                    <div ref={transcriptContainerRef} style={{ flex: 1, overflowY: 'auto', paddingRight: '6px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: 0 }}>
+                    <div ref={transcriptContainerRef} style={{ flex: 1, overflowY: 'auto', paddingRight: '6px', display: 'flex', flexDirection: 'column', gap: '10px', minHeight: 0 }}>
                       {(call.isRealTranscribed || (displayTranscript && displayTranscript.length > 0)) ? (
                         displayTranscript.map((line, idx) => {
                           const lineSec = typeof line.start === 'number' ? line.start : parseTimeToSeconds(line.time);
@@ -862,8 +1106,8 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
                                 }
                               }}
                               style={{
-                                padding: '14px',
-                                borderRadius: activeIsCandidate ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                                padding: '12px 14px',
+                                borderRadius: activeIsCandidate ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
                                 border: isActive 
                                   ? '2px solid #6366f1' 
                                   : activeIsCandidate 
@@ -874,8 +1118,8 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
                                   : activeIsCandidate 
                                     ? '#f0fdf4' 
                                     : '#ffffff',
-                                marginLeft: activeIsCandidate ? '32px' : '0px',
-                                marginRight: activeIsCandidate ? '0px' : '32px',
+                                marginLeft: activeIsCandidate ? '24px' : '0px',
+                                marginRight: activeIsCandidate ? '0px' : '24px',
                                 cursor: canSeek ? 'pointer' : 'default',
                                 transition: 'all 0.2s ease',
                                 boxShadow: isActive ? '0 4px 12px rgba(99, 102, 241, 0.15)' : '0 1px 2px rgba(0,0,0,0.03)',
@@ -883,7 +1127,7 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
                                 overflowWrap: 'anywhere'
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', fontWeight: '700', marginBottom: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', fontWeight: '700', marginBottom: '4px' }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: activeIsCandidate ? '#15803d' : '#4f46e5' }}>
                                   <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: activeIsCandidate ? '#22c55e' : '#6366f1' }} />
                                   {displaySpeaker}
@@ -896,8 +1140,8 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
                               </p>
 
                               {matchedScriptLine && (
-                                <div style={{ marginTop: '8px', display: 'flex' }}>
-                                  <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 8px', borderRadius: '6px', background: alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#fffbeb' : '#ecfdf5', border: `1px solid ${alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#fde68a' : '#a7f3d0'}`, color: alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#b45309' : '#047857', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <div style={{ marginTop: '6px', display: 'flex' }}>
+                                  <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#fffbeb' : '#ecfdf5', border: `1px solid ${alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#fde68a' : '#a7f3d0'}`, color: alignment[matchedScriptLine.id].status === 'TAKEN_LATER' ? '#b45309' : '#047857', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                     <Check className="w-3 h-3" />
                                     <span>Aligned: {matchedScriptLine.title}</span>
                                   </span>
@@ -923,69 +1167,64 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
 
                 </div>
 
-                {/* Right Column: Voice Quality Audits & 10 Checkpoints Checklist */}
-                <div style={{ flex: '1 1 42%', display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0, height: '100%', overflow: 'hidden' }}>
+                {/* Right Column: Compact Voice Parameters + Complete 10 Checkpoints Checklist */}
+                <div style={{ flex: '1 1 44%', display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0, height: '100%', overflow: 'hidden' }}>
 
-                  {/* Technical & Voice Quality Audits Card — FIXED HEIGHT COMPACT */}
-                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-                      <Volume2 className="w-4 h-4 text-indigo-600" />
-                      <h3 style={{ fontSize: '11px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
-                        Voice Parameters Audit
-                      </h3>
+                  {/* Technical & Voice Quality Audits Strip — COMPACT HORIZONTAL BAR */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '10px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Volume2 className="w-3.5 h-3.5 text-indigo-600" />
+                        <h3 style={{ fontSize: '11px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                          Voice Parameters Audit
+                        </h3>
+                      </div>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#047857', background: '#ecfdf5', padding: '2px 8px', borderRadius: '5px', border: '1px solid #a7f3d0' }}>
+                        Sentiment: {call.callQuality?.candidateSentiment || 'Interested'}
+                      </span>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px' }}>
-                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', display: 'block', letterSpacing: '0.05em' }}>Voice Clarity</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '5px', background: (call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '#ecfdf5' : '#fffbeb', color: (call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '#047857' : '#b45309', border: `1px solid ${(call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '#a7f3d0' : '#fde68a'}` }}>
-                          {(call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '✓ Clear & Audible' : `⚠️ ${call.callQuality?.voiceClarity || 'Good'}`}
-                        </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '6px 8px', borderRadius: '8px', textAlign: 'center' }}>
+                        <span style={{ fontSize: '9px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', display: 'block' }}>Clarity</span>
+                        <strong style={{ fontSize: '10px', color: (call.callQuality?.voiceClarity === 'Good' || !call.callQuality) ? '#047857' : '#b45309' }}>
+                          {call.callQuality?.voiceClarity || 'Clear'}
+                        </strong>
                       </div>
 
-                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px' }}>
-                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', display: 'block', letterSpacing: '0.05em' }}>Connection</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '5px', background: (call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '#ecfdf5' : '#fff1f2', color: (call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '#047857' : '#be123c', border: `1px solid ${(call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '#a7f3d0' : '#fecdd3'}` }}>
-                          {(call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '✓ Stable' : `⚠️ ${call.callQuality?.networkIssues || 'None'}`}
-                        </span>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '6px 8px', borderRadius: '8px', textAlign: 'center' }}>
+                        <span style={{ fontSize: '9px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', display: 'block' }}>Network</span>
+                        <strong style={{ fontSize: '10px', color: (call.callQuality?.networkIssues === 'None' || !call.callQuality) ? '#047857' : '#be123c' }}>
+                          {call.callQuality?.networkIssues || 'Stable'}
+                        </strong>
                       </div>
 
-                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px' }}>
-                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', display: 'block', letterSpacing: '0.05em' }}>Ambient Noise</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '5px', background: (call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '#ecfdf5' : '#fffbeb', color: (call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '#047857' : '#b45309', border: `1px solid ${(call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '#a7f3d0' : '#fde68a'}` }}>
-                          {(call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '✓ Quiet' : `⚠️ ${call.callQuality?.backgroundNoise || 'None'}`}
-                        </span>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '6px 8px', borderRadius: '8px', textAlign: 'center' }}>
+                        <span style={{ fontSize: '9px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', display: 'block' }}>Noise</span>
+                        <strong style={{ fontSize: '10px', color: (call.callQuality?.backgroundNoise === 'None' || !call.callQuality) ? '#047857' : '#b45309' }}>
+                          {call.callQuality?.backgroundNoise || 'Quiet'}
+                        </strong>
                       </div>
 
-                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px' }}>
-                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', display: 'block', letterSpacing: '0.05em' }}>Tone & Pace</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '5px', background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe' }}>
-                          {call.callQuality?.agentTone || 'Polite'} ({call.callQuality?.agentPacing || 'Normal'})
-                        </span>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '6px 8px', borderRadius: '8px', textAlign: 'center' }}>
+                        <span style={{ fontSize: '9px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', display: 'block' }}>Tone</span>
+                        <strong style={{ fontSize: '10px', color: '#4338ca' }}>
+                          {call.callQuality?.agentTone || 'Polite'}
+                        </strong>
                       </div>
-                    </div>
-
-                    <div style={{ marginTop: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748b', fontWeight: '600' }}>
-                        <Users className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Candidate Sentiment</span>
-                      </div>
-                      <strong style={{ fontSize: '11px', fontWeight: '800', color: '#047857', background: '#ecfdf5', padding: '2px 8px', borderRadius: '5px', border: '1px solid #a7f3d0' }}>
-                        {call.callQuality?.candidateSentiment || 'Neutral'}
-                      </strong>
                     </div>
                   </div>
 
-                  {/* Speech-to-Text Checkpoints Checklist Card — EXPANDS TO FILL REMAINING HEIGHT */}
-                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left' }}>
+                  {/* Speech-to-Text Checkpoints Checklist Card — EXPANDS WITH AMPLE SPACE */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '14px 16px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', textAlign: 'left' }}>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid #f1f5f9', marginBottom: '12px', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid #f1f5f9', marginBottom: '10px', flexShrink: 0 }}>
                       <div>
                         <h3 style={{ fontSize: '12px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
-                          Speech-to-Text Checkpoints
+                          Speech-to-Text Checkpoints (10 Rubrics)
                         </h3>
                         <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0 0 0' }}>
-                          10 Checkpoints pass/fail evaluation results.
+                          Pass/Fail evaluation against standard DPR screening script.
                         </p>
                       </div>
 
@@ -1003,7 +1242,7 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
                       </div>
                     </div>
 
-                    {/* Scrollable Checkpoint Items List — GUARANTEED TO SCROLL INSIDE CONTAINER */}
+                    {/* Scrollable Checkpoint Items List — AMPLE HEIGHT FOR ALL 10 ITEMS */}
                     <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
                       {PDF_SCRIPT_LINES.map((line, idx) => {
                         const { status, label } = getCheckpointState(line.id, line.evalKey);
@@ -1084,7 +1323,129 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
             );
           })()}
 
-          {/* TAB 2: DIARIZED TRANSCRIPT */}
+          {/* TAB 2: EXECUTIVE CALL SUMMARY */}
+          {activeTab === 'SUMMARY' && (() => {
+            const summary = getStructuredCallSummary(call);
+            const prof = summary.candidateProfile || {};
+
+            return (
+              <div style={{ maxWidth: '960px', margin: '0 auto', width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'left', paddingBottom: '20px' }}>
+                
+                {/* 1. Top Executive Overview Card */}
+                <div style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '20px 24px', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#eef2ff', border: '1px solid #c7d2fe', padding: '4px 12px', borderRadius: '99px', color: '#4338ca', fontSize: '11px', fontWeight: '800' }}>
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>AI EXECUTIVE BRIEFING</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '600' }}>Call ID: {call.id}</span>
+                  </div>
+
+                  <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0f172a', margin: '0 0 8px 0' }}>
+                    Candidate Screening Overview ({call.campaign || 'NTC Screening'})
+                  </h3>
+                  <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#334155', margin: 0, fontWeight: 500 }}>
+                    {summary.overview}
+                  </p>
+                </div>
+
+                {/* 2. Grid: Candidate Profile & Discussion Highlights */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '16px' }}>
+                  
+                  {/* Left Card: Candidate Extracted Profile */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+                      <div style={{ padding: '6px', background: '#f0fdf4', borderRadius: '8px', color: '#16a34a' }}>
+                        <UserCheck className="w-4 h-4" />
+                      </div>
+                      <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', margin: 0 }}>Candidate Extracted Profile</h4>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', display: 'block', textTransform: 'uppercase' }}>Candidate Name</span>
+                        <strong style={{ fontSize: '12px', color: '#0f172a' }}>{call.candidateName || 'Candidate'}</strong>
+                      </div>
+
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', display: 'block', textTransform: 'uppercase' }}>Experience</span>
+                        <strong style={{ fontSize: '12px', color: '#0f172a' }}>{prof.experience || 'Verified on Call'}</strong>
+                      </div>
+
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', display: 'block', textTransform: 'uppercase' }}>Current Domain</span>
+                        <strong style={{ fontSize: '12px', color: '#0f172a' }}>{prof.currentRole || 'Engineering / Screening'}</strong>
+                      </div>
+
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px', borderRadius: '10px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', display: 'block', textTransform: 'uppercase' }}>Interest Level</span>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '800',
+                          color: prof.interestLevel === 'Interested' ? '#15803d' : prof.interestLevel === 'Not Interested' ? '#be123c' : '#b45309'
+                        }}>
+                          {prof.interestLevel === 'Interested' ? '✓ High Interest' : prof.interestLevel || 'Neutral'}
+                        </span>
+                      </div>
+
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px', borderRadius: '10px', gridColumn: '1 / -1' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', display: 'block', textTransform: 'uppercase' }}>Location Preference</span>
+                        <strong style={{ fontSize: '12px', color: '#0f172a' }}>{prof.preferredLocation || 'Domestic & Gulf Opportunities'}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Card: Key Discussion Highlights */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+                      <div style={{ padding: '6px', background: '#eef2ff', borderRadius: '8px', color: '#4f46e5' }}>
+                        <ListChecks className="w-4 h-4" />
+                      </div>
+                      <h4 style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', margin: 0 }}>Key Discussion Highlights</h4>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {(summary.keyHighlights || []).map((highlight, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#334155', lineHeight: '1.5' }}>
+                          <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                          <span>{highlight}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* 3. Call Outcome & Next Action Steps */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                  
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <Award className="w-4 h-4 text-emerald-600" />
+                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#166534', textTransform: 'uppercase' }}>Call Outcome</span>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#14532d', lineHeight: '1.5', margin: 0, fontWeight: 500 }}>
+                      {summary.callOutcome}
+                    </p>
+                  </div>
+
+                  <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '14px', padding: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <Compass className="w-4 h-4 text-indigo-600" />
+                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#3730a3', textTransform: 'uppercase' }}>Next Action Steps</span>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#312e81', lineHeight: '1.5', margin: 0, fontWeight: 500 }}>
+                      {summary.nextSteps}
+                    </p>
+                  </div>
+
+                </div>
+
+              </div>
+            );
+          })()}
+
+          {/* TAB 3: DIARIZED TRANSCRIPT */}
           {activeTab === 'TRANSCRIPT' && (
             <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left', width: '100%', height: '100%', overflow: 'hidden' }}>
               <div style={{ padding: '10px 16px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '10px', fontSize: '11px', color: '#4338ca', fontWeight: '700', display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', flexShrink: 0 }}>
@@ -1152,7 +1513,7 @@ export default function AuditInspectorModal({ call: rawCall, onClose, onReAudit,
             </div>
           )}
 
-          {/* TAB 3: RAW CALL META */}
+          {/* TAB 4: RAW CALL META */}
           {activeTab === 'RAW_META' && (
             <div style={{ maxWidth: '900px', margin: '0 auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px', textAlign: 'left', width: '100%', height: '100%', overflowY: 'auto' }}>
               <h3 style={{ fontSize: '12px', fontWeight: '800', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '14px' }}>

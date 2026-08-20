@@ -18,70 +18,190 @@ export default function OpenAISettingsModal({ isOpen, onClose, apiKey, setApiKey
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="bg-[var(--bg-card-solid)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl max-w-md w-full p-6 relative modal-content transition-colors">
+    <div 
+      className="modal-backdrop select-none"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px'
+      }}
+    >
+      <div 
+        style={{ 
+          maxWidth: '480px',
+          width: '100%',
+          backgroundColor: '#ffffff',
+          borderRadius: '20px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          textAlign: 'left'
+        }}
+        className="modal-content"
+      >
         
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--bg-card-subtle)] transition-colors"
+        {/* Header */}
+        <div 
+          style={{
+            padding: '20px 24px',
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid #f1f5f9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}
         >
-          <X className="w-5 h-5" />
-        </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div 
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                backgroundColor: '#eef2ff',
+                border: '1px solid #e0e7ff',
+                color: '#4f46e5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Key style={{ width: '20px', height: '20px' }} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
+                  ChatGPT AI Engine Config
+                </h3>
+              </div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0', fontWeight: '400' }}>
+                Configure OpenAI API Key or use built-in evaluation model
+              </p>
+            </div>
+          </div>
 
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold">
-            <Key className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="font-extrabold text-[var(--text-primary)] text-base">ChatGPT AI Engine Config</h3>
-            <p className="text-xs text-[var(--text-secondary)] font-medium">Configure API Key or use built-in evaluation model</p>
-          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: '#94a3b8',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f1f5f9';
+              e.currentTarget.style.color = '#334155';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#94a3b8';
+            }}
+            title="Close"
+          >
+            <X style={{ width: '18px', height: '18px' }} />
+          </button>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-4 text-xs font-semibold">
+        <form onSubmit={handleSave} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           
           {/* Mode Toggle */}
-          <div className="p-3 bg-[var(--bg-card-subtle)] border border-[var(--border-color)] rounded-xl transition-colors">
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="font-bold text-[var(--text-primary)]">Use Built-in Fast AI Engine</span>
+          <div 
+            style={{
+              padding: '16px 18px',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '14px'
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>Use Built-in Fast AI Engine</span>
               <input
                 type="checkbox"
                 checked={useSimulatedAI}
                 onChange={(e) => setUseSimulatedAI(e.target.checked)}
-                className="w-4 h-4 text-blue-500 rounded cursor-pointer"
+                style={{ width: '16px', height: '16px', accentColor: '#4f46e5', cursor: 'pointer' }}
               />
             </label>
-            <p className="text-[11px] text-[var(--text-secondary)] mt-1.5 leading-relaxed font-medium">
+            <p style={{ fontSize: '12px', color: '#64748b', margin: '8px 0 0 0', lineHeight: 1.5 }}>
               Runs instant audio transcript analysis against all 10 DPR script rubrics without needing an external API key.
             </p>
           </div>
 
           {/* OpenAI API Key Input */}
           <div>
-            <label className="block text-[var(--text-secondary)] font-bold mb-1.5">OpenAI API Key (ChatGPT-4o)</label>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+              OpenAI API Key (ChatGPT-4o)
+            </label>
             <input
               type="password"
               placeholder="sk-..."
               value={localKey}
               onChange={(e) => setLocalKey(e.target.value)}
               disabled={useSimulatedAI}
-              className="input-field font-mono text-xs bg-[var(--bg-card-solid)] border-[var(--border-color)] text-[var(--text-primary)] disabled:opacity-40 disabled:bg-[var(--bg-card-subtle)]"
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                backgroundColor: useSimulatedAI ? '#f1f5f9' : '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '10px',
+                color: '#0f172a',
+                outline: 'none',
+                opacity: useSimulatedAI ? 0.6 : 1
+              }}
             />
-            <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed font-medium">
-              Key is stored locally in memory only. Never transmitted to third-party servers.
+            <p style={{ fontSize: '11px', color: '#94a3b8', margin: '6px 0 0 0' }}>
+              Key is stored locally in browser session memory only. Never transmitted to third-party servers.
             </p>
           </div>
 
-          <div className="pt-2 flex items-center justify-end">
-            <button type="submit" className="btn-primary py-2 px-4 text-xs font-bold">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '6px' }}>
+            <button 
+              type="submit" 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 22px',
+                backgroundColor: '#4f46e5',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '13px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#4338ca'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#4f46e5'; }}
+            >
               {savedSuccess ? (
                 <>
-                  <Check className="w-4 h-4" />
+                  <Check style={{ width: '16px', height: '16px' }} />
                   <span>Settings Saved!</span>
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-4 h-4" />
+                  <ShieldCheck style={{ width: '16px', height: '16px' }} />
                   <span>Save Configuration</span>
                 </>
               )}

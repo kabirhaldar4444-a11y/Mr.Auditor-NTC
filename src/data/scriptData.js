@@ -181,10 +181,12 @@ const candidateNames = [
 ];
 
 const agentNames = ["Naukri Vikalp", "Ananya Sharma", "Rahul Verma", "Priya Singh", "Amit Kumar"];
+const campaignList = ["NTC", "CRLA", "CRLB", "CRLD", "CRM", "NLPC", "CRMFC"];
 
 export const SAMPLE_INITIAL_DATA = candidateNames.map((name, i) => {
   const numStr = String(i + 1).padStart(3, '0');
   const agent = agentNames[i % agentNames.length];
+  const campaignName = campaignList[i % campaignList.length];
   const isFailed = (i % 7 === 1);
   const isAudited = (i % 2 === 0);
   
@@ -194,8 +196,8 @@ export const SAMPLE_INITIAL_DATA = candidateNames.map((name, i) => {
     callerId: `${2498500 + i}`,
     agentName: agent,
     agentCode: agent.split(' ')[0].toUpperCase() + '01',
-    campaign: "Naukri Screening",
-    queue: "DPRScreening1",
+    campaign: campaignName,
+    queue: `${campaignName}_Process`,
     duration: `0:0${3 + (i % 3)}:${(15 + (i * 9) % 45).toString().padStart(2, '0')}`,
     talkTime: `0:0${3 + (i % 3)}:${(10 + (i * 9) % 45).toString().padStart(2, '0')}`,
     holdTime: "0:00:05",

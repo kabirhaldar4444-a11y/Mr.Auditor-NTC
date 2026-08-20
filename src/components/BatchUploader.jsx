@@ -303,9 +303,10 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
 
     setLoading(false);
     setImportedCount(parsedCalls.length);
+    onImportData(parsedCalls);
     setTimeout(() => {
-      onImportData(parsedCalls);
-    }, 400);
+      onClose();
+    }, 350);
   };
 
   const handleDrop = (e) => {
@@ -317,90 +318,295 @@ export default function BatchUploader({ onImportData, onClose, sampleInitialRow 
   };
 
   return (
-    <div className="modal-backdrop select-none">
-      <div className="bg-white text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-xl max-w-xl w-full p-8 relative modal-content text-left">
+    <div 
+      className="modal-backdrop select-none"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px'
+      }}
+    >
+      <div 
+        style={{ 
+          maxWidth: '560px',
+          width: '100%',
+          backgroundColor: '#ffffff',
+          borderRadius: '20px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          textAlign: 'left'
+        }}
+        className="modal-content"
+      >
         
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+        {/* Modal Header */}
+        <div 
+          style={{
+            padding: '20px 24px',
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid #f1f5f9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}
         >
-          <X className="w-5 h-5" />
-        </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div 
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                backgroundColor: '#eef2ff',
+                border: '1px solid #e0e7ff',
+                color: '#4f46e5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Database style={{ width: '20px', height: '20px' }} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
+                  Batch Excel / CSV Ingestion
+                </h3>
+                <span 
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: '#eef2ff',
+                    color: '#4f46e5',
+                    border: '1px solid #e0e7ff'
+                  }}
+                >
+                  Telephony
+                </span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0', fontWeight: '400' }}>
+                Upload call records with automatic SlashRTC column & audio link mapping
+              </p>
+            </div>
+          </div>
 
-        <div className="flex items-center gap-4 mb-7">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center">
-            <Database className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-[var(--text-primary)] text-base">Batch Excel / CSV Ingestion</h3>
-            <p className="text-[13px] text-[var(--text-muted)] mt-0.5">Supports large records with automatic column parsing</p>
-          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: '#94a3b8',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f1f5f9';
+              e.currentTarget.style.color = '#334155';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#94a3b8';
+            }}
+            title="Close"
+          >
+            <X style={{ width: '18px', height: '18px' }} />
+          </button>
         </div>
 
-        {/* Drag & Drop Box */}
-        <div
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer ${
-            isDragging
-              ? 'border-indigo-400 bg-indigo-50'
-              : 'border-gray-200 hover:border-indigo-300 bg-gray-50 hover:bg-indigo-50/40'
-          }`}
-        >
-          <div className="w-12 h-12 rounded-xl bg-white border border-gray-200 shadow-sm text-indigo-500 flex items-center justify-center mx-auto mb-4">
-            <UploadCloud className="w-6 h-6 animate-bounce" />
-          </div>
-          <h4 className="font-semibold text-[var(--text-primary)] text-sm">Drag and drop your spreadsheet here</h4>
-          <p className="text-[13px] text-[var(--text-muted)] mt-1.5 leading-relaxed">Supports .XLSX, .XLS, or .CSV from SlashRTC</p>
+        {/* Modal Body */}
+        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          <label className="mt-5 inline-flex btn-primary text-sm py-2 px-5 cursor-pointer">
-            <span>Browse Files</span>
-            <input
-              type="file"
-              accept=".csv, .xlsx, .xls"
-              className="hidden"
-              onChange={(e) => e.target.files[0] && processFile(e.target.files[0])}
-            />
-          </label>
+          {/* Drag & Drop Box */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              padding: '36px 20px',
+              borderRadius: '16px',
+              border: isDragging ? '2px dashed #6366f1' : '2px dashed #cbd5e1',
+              backgroundColor: isDragging ? '#eef2ff' : '#f8fafc',
+              transition: 'all 0.2s ease',
+              cursor: 'pointer'
+            }}
+          >
+            <div 
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '16px',
+                backgroundColor: '#ffffff',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)',
+                color: '#4f46e5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px'
+              }}
+            >
+              <UploadCloud style={{ width: '28px', height: '28px' }} />
+            </div>
+
+            <h4 style={{ fontSize: '15px', fontWeight: '700', color: '#0f172a', margin: '0 0 6px 0' }}>
+              Drag and drop your spreadsheet here
+            </h4>
+            <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 20px 0', maxWidth: '360px', lineHeight: 1.5 }}>
+              Accepts exported call logs from SlashRTC with dynamic column recognition
+            </p>
+            
+            <label 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 22px',
+                backgroundColor: '#4f46e5',
+                color: '#ffffff',
+                borderRadius: '10px',
+                fontSize: '13px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
+                border: 'none',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#4338ca'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#4f46e5'; }}
+            >
+              <UploadCloud style={{ width: '16px', height: '16px' }} />
+              <span>Browse Files</span>
+              <input
+                type="file"
+                accept=".csv, .xlsx, .xls"
+                style={{ display: 'none' }}
+                onChange={(e) => e.target.files[0] && processFile(e.target.files[0])}
+              />
+            </label>
+
+            {/* File format pills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '18px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: '600', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#ffffff', color: '#475569', border: '1px solid #e2e8f0' }}>.CSV</span>
+              <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: '600', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#ffffff', color: '#475569', border: '1px solid #e2e8f0' }}>.XLSX</span>
+              <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: '600', padding: '2px 8px', borderRadius: '6px', backgroundColor: '#ffffff', color: '#475569', border: '1px solid #e2e8f0' }}>.XLS</span>
+              <span style={{ color: '#cbd5e1', margin: '0 2px' }}>•</span>
+              <span style={{ fontSize: '11px', fontWeight: '600', color: '#4f46e5' }}>SlashRTC Telephony Format</span>
+            </div>
+          </div>
+
+          {/* Loading Spinner */}
+          {loading && (
+            <div style={{ padding: '14px 16px', backgroundColor: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', fontWeight: '500', color: '#3730a3' }}>
+              <Sparkles className="animate-spin" style={{ width: '16px', height: '16px', color: '#4f46e5', flexShrink: 0 }} />
+              <span>Parsing spreadsheet rows & mapping SlashRTC recording links...</span>
+            </div>
+          )}
+
+          {/* Error message */}
+          {errorMsg && (
+            <div style={{ padding: '14px 16px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', fontWeight: '500', color: '#991b1b' }}>
+              <AlertCircle style={{ width: '16px', height: '16px', color: '#dc2626', flexShrink: 0 }} />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {/* Success count */}
+          {importedCount !== null && (
+            <div style={{ padding: '12px 16px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '600', color: '#166534', fontFamily: 'monospace' }}>
+                <Check style={{ width: '16px', height: '16px', color: '#16a34a', flexShrink: 0 }} />
+                <span>Successfully ingested {importedCount.toLocaleString()} call records!</span>
+              </div>
+              <button
+                onClick={() => onClose()}
+                style={{
+                  padding: '6px 14px',
+                  backgroundColor: '#16a34a',
+                  color: '#ffffff',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  border: 'none',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+              >
+                Proceed &rarr;
+              </button>
+            </div>
+          )}
+
         </div>
 
-        {/* Loading Spinner */}
-        {loading && (
-          <div className="mt-4 p-4 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl text-[13px] font-medium flex items-center gap-2.5">
-            <Sparkles className="w-4 h-4 animate-spin shrink-0" />
-            <span>Parsing data rows & mapping SlashRTC recording links...</span>
-          </div>
-        )}
-
-        {/* Error message */}
-        {errorMsg && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-[13px] font-medium flex items-center gap-2.5">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {/* Success count */}
-        {importedCount !== null && (
-          <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-[13px] font-semibold flex items-center gap-2.5 font-mono">
-            <Check className="w-4 h-4 shrink-0" />
-            <span>Ingested {importedCount.toLocaleString()} calls into AI pipeline!</span>
-          </div>
-        )}
-
-        {/* Quick sample loader footer */}
-        <div className="mt-6 pt-5 border-t border-[var(--border-color)] flex items-center justify-between">
-          <span className="text-[13px] text-[var(--text-muted)]">Need to test a sample call record?</span>
+        {/* Footer */}
+        <div 
+          style={{
+            padding: '16px 24px',
+            backgroundColor: '#f8fafc',
+            borderTop: '1px solid #e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px'
+          }}
+        >
+          <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+            Need to test a sample call record?
+          </span>
           <button
             onClick={() => {
               onImportData(sampleInitialRow);
               onClose();
             }}
-            className="btn-secondary text-[13px] py-1.5 px-4 text-indigo-600 hover:bg-indigo-50 border-indigo-200"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              backgroundColor: '#ffffff',
+              color: '#4f46e5',
+              border: '1px solid #c7d2fe',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#eef2ff';
+              e.currentTarget.style.borderColor = '#818cf8';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#ffffff';
+              e.currentTarget.style.borderColor = '#c7d2fe';
+            }}
           >
-            Load Sample Row
+            <Sparkles style={{ width: '14px', height: '14px', color: '#4f46e5' }} />
+            <span>Load Sample Record</span>
           </button>
         </div>
 

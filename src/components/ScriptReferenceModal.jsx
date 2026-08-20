@@ -6,26 +6,119 @@ export default function ScriptReferenceModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop">
-      <div className="bg-[var(--bg-card-solid)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-color)] shadow-2xl max-w-4xl w-full h-[85vh] flex flex-col relative overflow-hidden modal-content transition-colors">
+    <div 
+      className="modal-backdrop select-none"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px'
+      }}
+    >
+      <div 
+        style={{ 
+          maxWidth: '860px',
+          width: '100%',
+          height: '85vh',
+          backgroundColor: '#ffffff',
+          borderRadius: '20px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          textAlign: 'left'
+        }}
+        className="modal-content"
+      >
         
         {/* Header */}
-        <div className="p-4 px-6 bg-[var(--bg-card-solid)] border-b border-[var(--border-color)] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-500/20">
-              <FileText className="w-5 h-5" />
+        <div 
+          style={{
+            padding: '20px 24px',
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid #f1f5f9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexShrink: 0
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div 
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                backgroundColor: '#eef2ff',
+                border: '1px solid #e0e7ff',
+                color: '#4f46e5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <FileText style={{ width: '20px', height: '20px' }} />
             </div>
             <div>
-              <h2 className="font-extrabold text-base text-[var(--text-primary)]">DPR Screening Script & Rubric Guide</h2>
-              <p className="text-xs text-[var(--text-secondary)] font-medium">Standard Operating Procedure for Project-Based Roles</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
+                  DPR Screening Script & Rubric Guide
+                </h2>
+                <span 
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: '#eef2ff',
+                    color: '#4f46e5',
+                    border: '1px solid #e0e7ff'
+                  }}
+                >
+                  SOP
+                </span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0', fontWeight: '400' }}>
+                Standard Operating Procedure for Project-Based Telephony Screening
+              </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--bg-card-subtle)] transition-colors"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: '#94a3b8',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f1f5f9';
+              e.currentTarget.style.color = '#334155';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#94a3b8';
+            }}
+            title="Close"
           >
-            <X className="w-5 h-5" />
+            <X style={{ width: '18px', height: '18px' }} />
           </button>
         </div>
 
